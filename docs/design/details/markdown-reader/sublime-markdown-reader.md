@@ -40,6 +40,12 @@ Normal Markdown is converted to minihtml and assigned to a Sublime
 `HtmlSheet`. The preview may be opened as an editor tab or in an adjacent
 group. Rendering must not depend on temporary HTML files.
 
+Native typography and component surfaces use a GitHub-inspired hierarchy while
+deriving foreground, background, accent, muted, border, and surface colors from
+the active Sublime color scheme. Pipe-delimited Markdown tables use selectable
+`div` containers because minihtml does not implement semantic table elements;
+the full browser preview renders the same tokens as a semantic HTML table.
+
 The implementation must verify how `HtmlSheet.set_contents()` affects the
 current scroll position. Sublime does not expose a complete public viewport API,
 so synchronized source/preview scrolling is not a committed feature.
@@ -56,8 +62,8 @@ so synchronized source/preview scrolling is not a committed feature.
 - Return image data in memory or as Base64; never write generated images into
   the user's Markdown project.
 - Render wide diagrams against the target preview width.
-- Preserve the original Mermaid or TeX source so users can inspect or copy it
-  when the image itself is not selectable.
+- Keep Mermaid source internally for rendering and cache keys without repeating
+  it below the diagram. Preserve the existing Copy TeX action for formulas.
 
 ### Renderer process
 

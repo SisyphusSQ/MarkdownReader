@@ -86,7 +86,7 @@ class BrowserPreviewRenderingTests(unittest.TestCase):
         self.assertEqual(1, html.count("data:image/png;base64,"))
         self.assertIn("browser preview embedded-image limit", html)
 
-    def test_emits_inert_mermaid_and_math_definitions_for_the_runtime(self):
+    def test_emits_hidden_mermaid_definition_without_visible_source(self):
         from markdown_reader.browser_preview import render_browser_preview
 
         source = (
@@ -99,11 +99,12 @@ class BrowserPreviewRenderingTests(unittest.TestCase):
         self.assertEqual(1, html.count('class="interactive-mermaid"'))
         self.assertIn('class="mermaid-target"', html)
         self.assertIn('class="mermaid-definition" hidden', html)
-        self.assertIn("A[&lt;unsafe&gt;]", html)
+        self.assertEqual(1, html.count("A[&lt;unsafe&gt;]"))
         self.assertIn('data-action="zoom-in"', html)
         self.assertIn('data-action="zoom-out"', html)
         self.assertIn('data-action="reset"', html)
-        self.assertIn("<summary>Mermaid source</summary>", html)
+        self.assertNotIn("<summary>Mermaid source</summary>", html)
+        self.assertNotIn('class="mermaid-source"', html)
         self.assertEqual(1, html.count('class="math-expression inline-math"'))
         self.assertEqual(1, html.count('class="math-expression display-math"'))
         self.assertIn('class="math-target"', html)
@@ -128,6 +129,45 @@ class BrowserPreviewRenderingTests(unittest.TestCase):
         self.assertNotIn('class="math-expression', default_html)
         self.assertIn('class="math-expression inline-math"', enabled_html)
         self.assertIn(">x+1</code>", enabled_html)
+
+    def test_renders_markdown_tables_as_semantic_browser_tables(self):
+        from markdown_reader.browser_preview import render_browser_preview
+
+        source = """| Component | State |
+| :--- | ---: |
+| Browser | **Ready** |
+"""
+
+        html = render_browser_preview(source, runtime_script="")
+
+        self.assertIn("<table>", html)
+        self.assertIn("<thead>", html)
+        self.assertIn("<tbody>", html)
+        self.assertIn('<th style="text-align:left">Component</th>', html)
+        self.assertIn('<td style="text-align:right"><strong>Ready</strong></td>', html)
+
+    def test_renders_compact_browser_task_lists_with_checked_labels(self):
+        from markdown_reader.browser_preview import render_browser_preview
+
+        html = render_browser_preview(
+            "- [x] done\n  - [ ] nested\n- [ ] open\n",
+            runtime_script="",
+        )
+
+        self.assertIn(
+            '<li class="task-list-item task-list-item-checked">'
+            '<input class="task-list-item-checkbox" type="checkbox" disabled checked/>'
+            '<span class="task-label task-label-checked">done</span>',
+            html,
+        )
+        self.assertIn(
+            '<li class="task-list-item task-list-item-open">'
+            '<input class="task-list-item-checkbox" type="checkbox" disabled/>'
+            '<span class="task-label">nested</span>',
+            html,
+        )
+        self.assertIn("text-decoration: line-through", html)
+        self.assertIn("border-left: 1px solid var(--border)", html)
 
     def test_rejects_oversized_markdown_before_parsing(self):
         from markdown_reader.browser_preview import render_browser_preview

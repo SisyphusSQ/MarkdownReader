@@ -21,7 +21,9 @@ embedded images.
 - Refresh an open preview after a configurable debounce delay (250ms by
   default) without moving the preview or stealing editor focus.
 - Reuse the same preview tab when the command is run again.
-- Render headings, paragraphs, emphasis, quotations, lists, and fenced code.
+- Render headings, paragraphs, emphasis, quotations, lists, fenced code, and
+  pipe-delimited Markdown tables. Native tables remain selectable through a
+  minihtml-compatible div layout; browser previews use semantic HTML tables.
 - Open absolute HTTP(S) links through Sublime's native minihtml protocol support.
 - Render task lists with static checkbox markers.
 - Render existing local PNG, JPG, and GIF files relative to a saved Markdown
@@ -31,7 +33,7 @@ embedded images.
 - Inspect effective settings, Node.js, Chrome, and local renderer versions
   through **MarkdownReader: Show Diagnostics**.
 - Render fenced `mermaid` blocks offline as transparent, theme-aware PNG images
-  while preserving the original diagram source below each image.
+  without repeating the diagram source below the rendered result.
 - Render `\(...\)` inline formulas plus `$$...$$` and `\[...\]` display
   formulas through local MathJax as transparent PNG images. Single-dollar math
   is disabled by default so currency remains ordinary text; each formula has a

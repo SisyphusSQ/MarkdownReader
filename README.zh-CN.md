@@ -18,7 +18,8 @@ MarkdownReader 是 Sublime Text 4 的原生 Markdown 阅读与实时预览插件
 - 源文档停止编辑后按可配置延迟（默认 250ms）自动刷新已打开的预览，不移动预览，
   也不抢走编辑焦点。
 - 再次执行命令时复用并更新同一个预览标签页。
-- 渲染标题、段落、强调、引用、列表和围栏代码块。
+- 渲染标题、段落、强调、引用、列表、围栏代码块和管道分隔 Markdown 表格；
+  原生预览以文字可选择的 minihtml div 布局展示表格，浏览器预览使用语义化 HTML 表格。
 - 通过 Sublime 原生 minihtml 协议支持打开绝对 HTTP(S) 链接。
 - 用静态 checkbox 标记展示任务列表。
 - 相对已保存 Markdown 文件解析并展示本地 PNG、JPG 和 GIF；远程图片默认阻断，
@@ -26,8 +27,8 @@ MarkdownReader 是 Sublime Text 4 的原生 Markdown 阅读与实时预览插件
 - 其他链接协议保持不可点击，原始 HTML 会被转义。
 - 通过 **MarkdownReader: Show Diagnostics** 查看有效设置、Node.js、Chrome
   和本地 renderer 各组件版本。
-- 将 `mermaid` 围栏代码块离线渲染为透明、适配主题的 PNG，同时在图片下方
-  保留原始图表源码。
+- 将 `mermaid` 围栏代码块离线渲染为透明、适配主题的 PNG，预览中不在图片下方
+  重复展示图表源码。
 - 通过本地 MathJax 将 `\(...\)` 行内公式、`$$...$$` 和 `\[...\]` 块公式
   渲染为透明 PNG。默认不启用单美元公式，避免把金额误判为公式；每个公式都提供
   **Copy TeX** 操作。

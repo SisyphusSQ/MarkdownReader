@@ -11,6 +11,7 @@ from pathlib import Path
 from .mathjax import math_plugin
 from .security import DEFAULT_SECURITY_POLICY
 from .vendor.mistune import create_markdown
+from .vendor.mistune.plugins.table import table
 from .vendor.mistune.plugins.task_lists import task_lists
 from .vendor.mistune.renderers.html import HTMLRenderer
 from .vendor.mistune.util import escape, escape_url, striptags
@@ -85,10 +86,32 @@ button:hover { border-color: var(--accent); }
     padding: 2rem 0 4rem;
 }
 h1, h2, h3, h4, h5, h6 { line-height: 1.25; margin: 1.4em 0 0.6em; }
+h1, h2 { padding-bottom: 0.3em; border-bottom: 1px solid var(--border); }
 a { color: var(--accent); }
 blockquote { margin-left: 0; padding-left: 1rem; border-left: 0.25rem solid var(--border); }
 pre { overflow: auto; padding: 0.9rem; background: var(--surface); border-radius: 0.4rem; }
 code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+:not(pre) > code { padding: 0.15em 0.35em; background: var(--surface); border-radius: 0.3rem; }
+ul:has(> li.task-list-item) { margin: 0.75rem 0; padding-left: 0; }
+li.task-list-item { margin: 0.15rem 0; list-style: none; line-height: 1.45; }
+li.task-list-item > p { margin: 0; }
+.task-list-item-checkbox {
+    width: 1rem;
+    height: 1rem;
+    margin: 0 0.5rem 0 0;
+    accent-color: var(--accent);
+    opacity: 1;
+}
+.task-label-checked { color: var(--muted); text-decoration: line-through; }
+li.task-list-item > ul {
+    margin: 0.15rem 0 0 0.65rem;
+    padding-left: 1.4rem;
+    border-left: 1px solid var(--border);
+}
+table { width: 100%; margin: 1rem 0; border-spacing: 0; border-collapse: collapse; }
+th, td { padding: 0.5rem 0.75rem; border: 1px solid var(--border); }
+th { font-weight: 600; background: var(--surface); }
+tbody tr:nth-child(2n) { background: var(--surface); }
 img.local-image { display: block; max-width: 100%; height: auto; margin: 1rem auto; }
 .image-placeholder { color: var(--muted); }
 .interactive-mermaid, .display-math {
@@ -101,7 +124,6 @@ img.local-image { display: block; max-width: 100%; height: auto; margin: 1rem au
 .mermaid-toolbar { display: flex; justify-content: flex-end; margin-bottom: 0.75rem; }
 .mermaid-viewport { overflow: auto; padding: 0.5rem; background: var(--background); }
 .mermaid-target { width: 100%; transition: transform 120ms ease; }
-.mermaid-source { margin-top: 0.75rem; color: var(--muted); }
 .math-target mjx-container { margin: 0; color: var(--foreground); }
 .display-math .math-target { display: block; overflow-x: auto; text-align: center; }
 .render-error, .security-error { color: var(--danger); white-space: pre-wrap; }
@@ -387,8 +409,46 @@ class BrowserHtmlRenderer(HTMLRenderer):
             image += ' title="{}"'.format(escape(title))
         return image + " />"
 
+    def task_list_item(self, text, checked=False):
+        """Render a compact checkbox and isolate its label from nested tasks."""
+        state_class = "checked" if checked else "open"
+        label_class = "task-label task-label-checked" if checked else "task-label"
+        checkbox = '<input class="task-list-item-checkbox" type="checkbox" disabled'
+        checkbox += " checked/>" if checked else "/>"
+
+        if text.startswith("<p>"):
+            paragraph_end = text.find("</p>")
+            label = text[3:paragraph_end]
+            remainder = text[paragraph_end + 4 :]
+            contents = '<p>{}<span class="{}">{}</span></p>{}'.format(
+                checkbox,
+                label_class,
+                label,
+                remainder,
+            )
+        else:
+            nested_positions = [
+                position
+                for position in (text.find("<ul>"), text.find("<ol>"))
+                if position >= 0
+            ]
+            nested_start = min(nested_positions) if nested_positions else len(text)
+            label = text[:nested_start]
+            remainder = text[nested_start:]
+            contents = '{}<span class="{}">{}</span>{}'.format(
+                checkbox,
+                label_class,
+                label,
+                remainder,
+            )
+
+        return '<li class="task-list-item task-list-item-{}">{}</li>\n'.format(
+            state_class,
+            contents,
+        )
+
     def block_code(self, code, info=None):
-        """Expose Mermaid source only through inert text nodes."""
+        """Emit the inert definition required by the local Mermaid runtime."""
         language = info.strip().split(None, 1)[0] if info else ""
         if language.lower() != "mermaid":
             return super().block_code(code, info)
@@ -403,10 +463,8 @@ class BrowserHtmlRenderer(HTMLRenderer):
             '<div class="mermaid-viewport"><div class="mermaid-target" '
             'aria-label="Interactive Mermaid diagram"></div></div>'
             '<pre class="mermaid-definition" hidden>{}</pre>'
-            '<details class="mermaid-source"><summary>Mermaid source</summary>'
-            '<pre><code>{}</code></pre></details>'
             "</section>\n"
-        ).format(safe_source, safe_source)
+        ).format(safe_source)
 
     def block_math(self, tex, delimiter="dollar"):
         """Emit an inert display-formula definition for the local runtime."""
@@ -461,7 +519,7 @@ def render_browser_preview(
     else:
         markdown = create_markdown(
             renderer=renderer,
-            plugins=[task_lists, math_plugin(allow_single_dollar_math)],
+            plugins=[table, task_lists, math_plugin(allow_single_dollar_math)],
         )
         body = markdown(source)
     runtime_data = base64.b64encode(runtime_script.encode("utf-8")).decode("ascii")

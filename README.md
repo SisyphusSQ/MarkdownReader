@@ -2,13 +2,22 @@
 
 [简体中文](README.zh-CN.md)
 
-MarkdownReader is a planned native Markdown reader and live-preview package for
+MarkdownReader is a native Markdown reader and live-preview package for
 Sublime Text 4. It is designed to keep normal Markdown content inside a Sublime
 `HtmlSheet`, while rendering Mermaid diagrams and MathJax formulas locally as
 embedded images.
 
-> Project status: repository initialized; the package is not installable yet
-> and no release has been published.
+> Project status: active 0.1.0 development. The first native-preview slice is
+> usable from a source checkout; no release has been published yet.
+
+## Available now
+
+- Open the active Markdown buffer through **MarkdownReader: Open Preview**.
+- Preview unsaved edits in a native, theme-aware Sublime `HtmlSheet`.
+- Reuse the same preview tab when the command is run again.
+- Render headings, paragraphs, emphasis, quotations, lists, and fenced code.
+- Keep links inert and escape raw HTML until the dedicated security and link
+  handling slices are complete.
 
 ## Goals
 
@@ -34,10 +43,34 @@ The initial design, constraints, security model, and proof-of-concept checklist
 are documented in
 [docs/design/details/markdown-reader/sublime-markdown-reader.md](docs/design/details/markdown-reader/sublime-markdown-reader.md).
 
-The repository root is also the Sublime package root. Runtime package files and
-the renderer will be added only when their first vertical slice can be loaded
-and verified; this bootstrap commit intentionally does not expose broken
-commands or placeholder functionality.
+The repository root is also the Sublime package root.
+
+## Install from source
+
+On macOS, clone this repository and link it into Sublime's Packages directory:
+
+```bash
+ln -s /absolute/path/to/MarkdownReader \
+  "$HOME/Library/Application Support/Sublime Text/Packages/MarkdownReader"
+```
+
+Use **Preferences: Browse Packages** if your Sublime installation uses a
+different Packages directory. Reload the plugin or restart Sublime, open a
+Markdown file, and run **MarkdownReader: Open Preview** from the Command
+Palette.
+
+## Development
+
+The plugin runtime has no installation-time Python dependency: the required
+Mistune subset is vendored in the package. Development uses Python 3.8 to match
+Sublime's plugin host and a project-local uv environment:
+
+```bash
+uv venv --python 3.8 .venv
+uv pip install --python .venv/bin/python -r requirements-dev.txt
+.venv/bin/ruff check .
+.venv/bin/python -m unittest discover -s tests -v
+```
 
 ## Releases
 

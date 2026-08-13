@@ -2,11 +2,20 @@
 
 [English](README.md)
 
-MarkdownReader 计划作为 Sublime Text 4 的原生 Markdown 阅读与实时预览插件。
+MarkdownReader 是 Sublime Text 4 的原生 Markdown 阅读与实时预览插件。
 普通 Markdown 内容由 Sublime `HtmlSheet` 展示，Mermaid 图表与 MathJax 公式
 则通过本地无界面浏览器离线渲染为内嵌图片。
 
-> 当前状态：仓库与工程文档已初始化；插件尚不可安装，也没有发布任何版本。
+> 当前状态：正在开发 0.1.0。第一个原生预览纵向切片已可从源码使用，
+> 尚未发布正式版本。
+
+## 当前可用能力
+
+- 通过 **MarkdownReader: Open Preview** 预览当前 Markdown 缓冲区。
+- 在跟随 Sublime 主题的原生 `HtmlSheet` 中展示尚未保存的编辑内容。
+- 再次执行命令时复用并更新同一个预览标签页。
+- 渲染标题、段落、强调、引用、列表和围栏代码块。
+- 在链接与安全能力的独立切片完成前，链接保持不可点击，原始 HTML 会被转义。
 
 ## 目标
 
@@ -28,8 +37,32 @@ MarkdownReader 计划作为 Sublime Text 4 的原生 Markdown 阅读与实时预
 初始方案、能力边界、安全模型与 PoC 验证清单见
 [docs/design/details/markdown-reader/sublime-markdown-reader.md](docs/design/details/markdown-reader/sublime-markdown-reader.md)。
 
-仓库根目录同时也是 Sublime package 根目录。只有形成可加载、可验证的纵向切片后，
-才会加入运行时代码和本地渲染器；初始化提交不会暴露不可用命令或伪造占位功能。
+仓库根目录同时也是 Sublime package 根目录。
+
+## 从源码安装
+
+在 macOS 上克隆仓库，并将它链接到 Sublime 的 Packages 目录：
+
+```bash
+ln -s /absolute/path/to/MarkdownReader \
+  "$HOME/Library/Application Support/Sublime Text/Packages/MarkdownReader"
+```
+
+如果 Sublime 使用了其他 Packages 目录，可执行 **Preferences: Browse Packages**
+确认实际位置。重新加载插件或重启 Sublime，打开 Markdown 文件，再从 Command Palette
+执行 **MarkdownReader: Open Preview**。
+
+## 开发环境
+
+插件运行时不需要现场安装 Python 依赖；所需的 Mistune 子集已随插件 vendoring。
+开发环境使用 Python 3.8 以匹配 Sublime 插件宿主，并通过 uv 创建项目内虚拟环境：
+
+```bash
+uv venv --python 3.8 .venv
+uv pip install --python .venv/bin/python -r requirements-dev.txt
+.venv/bin/ruff check .
+.venv/bin/python -m unittest discover -s tests -v
+```
 
 ## 发布
 

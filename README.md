@@ -37,6 +37,9 @@ embedded images.
 - Re-render only changed Mermaid and MathJax sources. Completed results use a
   shared in-memory LRU cache bounded to 128 entries and an estimated 64 MiB;
   cache keys include the renderer/version and every visual render option.
+- Open an offline, full-page snapshot through **MarkdownReader: Open Full
+  Preview in Browser**. The browser page keeps Mermaid as sanitized SVG with
+  zoom controls, renders MathJax as SVG, and provides **Print / Save as PDF**.
 
 To opt in to `$...$` inline formulas, open **Preferences: Package Settings →
 MarkdownReader → Settings** and set `"math_single_dollar": true`. The default
@@ -49,6 +52,15 @@ non-HTTP(S) links are inert, and remote images never load. Local images must be
 regular PNG, JPG, or GIF files inside the saved Markdown file's directory tree
 and no larger than 20 MiB. Markdown sources larger than 2 MiB show a diagnostic
 instead of entering the parser. These limits are measured in bytes.
+
+The full browser preview does not grant the browser access to the Markdown
+project. Approved local images are embedded as data URIs, raw HTML remains
+escaped, Mermaid uses strict mode with active links removed, and a Content
+Security Policy blocks network, file, frame, form, media, and object resources.
+All embedded local images share an additional 40 MiB document budget. The
+self-contained HTML is written to a private operating-system temporary
+directory, never to the Markdown project, and is removed when the plugin
+unloads. It is a point-in-time snapshot; run the command again after editing.
 
 ## Goals
 
@@ -111,6 +123,8 @@ cache directory when first needed. The pinned Mermaid, MathJax, and
 `puppeteer-core` runtime is committed as a single bundle, so end users do not
 run `npm install`. Rendered diagram and formula images are cached only in
 memory, are cleared when the plugin unloads, and are never written to disk.
+The separate browser-preview bundle is also included in the package and runs
+inside a modern default browser without a CDN request.
 
 ## Releases
 

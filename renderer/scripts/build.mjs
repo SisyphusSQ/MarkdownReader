@@ -1,4 +1,5 @@
 import {build} from "esbuild";
+import fs from "node:fs/promises";
 import path from "node:path";
 import {fileURLToPath} from "node:url";
 
@@ -15,6 +16,25 @@ const browserBundle = await build({
   target: ["chrome120"],
   write: false,
 });
+
+await build({
+  entryPoints: [path.join(rendererDirectory, "src", "browser-preview.js")],
+  bundle: true,
+  format: "iife",
+  legalComments: "eof",
+  minify: true,
+  outfile: path.join(rendererDirectory, "browser-preview.js"),
+  platform: "browser",
+  target: ["chrome110", "firefox115", "safari16"],
+});
+
+const browserPreviewPath = path.join(rendererDirectory, "browser-preview.js");
+const browserPreviewSource = await fs.readFile(browserPreviewPath, "utf8");
+await fs.writeFile(
+  browserPreviewPath,
+  browserPreviewSource.replace(/[\t ]+$/gm, ""),
+  "utf8",
+);
 
 const mathJaxWorkerBundle = await build({
   entryPoints: [path.join(rendererDirectory, "src", "mathjax-worker.js")],

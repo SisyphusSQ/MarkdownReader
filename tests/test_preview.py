@@ -157,6 +157,40 @@ class PreviewManagerTests(unittest.TestCase):
         self.assertEqual([(sheet, 1, -1)], window.moved_sheets)
         self.assertEqual([sheet], window.focused_sheets)
 
+    def test_refreshes_existing_preview_without_moving_or_focusing_it(self):
+        window = FakeWindow(11, num_groups=2)
+        sheet = self.manager.open_preview(window, self.view, make_region, group=1)
+        self.view.text = "automatic refresh"
+
+        refreshed_sheet = self.manager.refresh_preview(window, self.view, make_region)
+
+        self.assertIs(sheet, refreshed_sheet)
+        self.assertEqual(1, sheet.group)
+        self.assertEqual(["<p>automatic refresh</p>"], sheet.content_updates)
+        self.assertEqual([], window.moved_sheets)
+        self.assertEqual([], window.focused_sheets)
+
+    def test_does_not_recreate_closed_preview_during_refresh(self):
+        sheet = self.manager.open_preview(self.window, self.view, make_region)
+        sheet.owner = None
+
+        refreshed_sheet = self.manager.refresh_preview(self.window, self.view, make_region)
+
+        self.assertIsNone(refreshed_sheet)
+        self.assertEqual(1, len(self.window.created_sheets))
+        self.assertFalse(self.manager.has_preview(self.window, self.view))
+
+    def test_accepts_equivalent_window_wrapper_for_open_sheet(self):
+        sheet = self.manager.open_preview(self.window, self.view, make_region)
+        sheet.owner = FakeWindow(self.window.id())
+        self.view.text = "wrapper-safe refresh"
+
+        self.assertTrue(self.manager.has_preview(self.window, self.view))
+        refreshed_sheet = self.manager.refresh_preview(self.window, self.view, make_region)
+
+        self.assertIs(sheet, refreshed_sheet)
+        self.assertEqual(["<p>wrapper-safe refresh</p>"], sheet.content_updates)
+
     def test_uses_untitled_name_when_source_has_no_name(self):
         view = FakeView(33, "", "draft")
 

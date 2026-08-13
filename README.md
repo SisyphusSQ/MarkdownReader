@@ -17,6 +17,8 @@ embedded images.
   **MarkdownReader: Open Preview Side by Side**. A single-group window becomes
   two equal columns; existing multi-group layouts are preserved.
 - Preview unsaved edits in a native, theme-aware Sublime `HtmlSheet`.
+- Refresh an open preview 250ms after the latest source edit without moving the
+  preview or stealing editor focus.
 - Reuse the same preview tab when the command is run again.
 - Render headings, paragraphs, emphasis, quotations, lists, and fenced code.
 - Keep links inert and escape raw HTML until the dedicated security and link

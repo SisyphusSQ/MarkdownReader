@@ -20,6 +20,13 @@ class CommandPaletteResourceTests(unittest.TestCase):
         )
         self.assertIn(
             {
+                "caption": "MarkdownReader: Check Renderer Environment",
+                "command": "markdown_reader_check_renderer_environment",
+            },
+            commands,
+        )
+        self.assertIn(
+            {
                 "caption": "MarkdownReader: Open Preview Side by Side",
                 "command": "markdown_reader_open_preview_side_by_side",
             },

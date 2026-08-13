@@ -26,6 +26,8 @@ embedded images.
 - Render existing local PNG, JPG, and GIF files relative to a saved Markdown
   file. Remote, missing, and unsupported images remain explicit placeholders.
 - Keep other link protocols inert and escape raw HTML.
+- Check Node.js, Chrome, and the local renderer protocol through
+  **MarkdownReader: Check Renderer Environment**.
 
 ## Security defaults
 
@@ -87,6 +89,12 @@ uv pip install --python .venv/bin/python -r requirements-dev.txt
 .venv/bin/ruff check .
 .venv/bin/python -m unittest discover -s tests -v
 ```
+
+The special-block renderer is a lazy, reusable Node.js child process using
+newline-delimited JSON over stdin/stdout; it never opens a listening port.
+Renderer resources bundled with the package are materialized under Sublime's
+cache directory when first needed. Mermaid and MathJax rendering are added in
+their dedicated development slices.
 
 ## Releases
 

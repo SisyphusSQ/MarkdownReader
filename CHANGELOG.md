@@ -18,5 +18,6 @@ The project intends to use semantic versioning once it has an installable releas
 - Debounced live refresh that preserves the preview group and source-editor focus.
 - HTTP(S) links, static task-list markers, and resolved local PNG/JPG/GIF images.
 - Central untrusted-input policy with source, protocol, local-path, and image-size limits.
+- Lazy reusable NDJSON renderer process with Node/Chrome diagnostics and lifecycle cleanup.
 - Vendored Mistune 3.3.0 runtime subset with Python 3.8 compatibility adjustments.
 - Unit tests, a manual preview fixture, a project-local uv workflow, and CI checks.

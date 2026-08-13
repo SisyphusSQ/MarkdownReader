@@ -23,6 +23,8 @@ MarkdownReader 是 Sublime Text 4 的原生 Markdown 阅读与实时预览插件
 - 相对已保存 Markdown 文件解析并展示本地 PNG、JPG 和 GIF；远程、缺失和不支持的
   图片显示明确占位信息。
 - 其他链接协议保持不可点击，原始 HTML 会被转义。
+- 通过 **MarkdownReader: Check Renderer Environment** 检查 Node.js、Chrome
+  和本地 renderer 协议。
 
 ## 默认安全策略
 
@@ -77,6 +79,10 @@ uv pip install --python .venv/bin/python -r requirements-dev.txt
 .venv/bin/ruff check .
 .venv/bin/python -m unittest discover -s tests -v
 ```
+
+特殊块 renderer 是懒启动、可复用的 Node.js 子进程，通过 stdin/stdout 传输
+newline-delimited JSON，不监听任何端口。随包资源首次使用时写入 Sublime cache；
+Mermaid 和 MathJax 渲染分别在其后续独立切片中加入。
 
 ## 发布
 

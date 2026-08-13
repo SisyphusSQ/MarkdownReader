@@ -121,6 +121,13 @@ Markdown and embedded diagram source are untrusted input.
 - Pin renderer assets and never fetch executable scripts from a CDN at preview
   time.
 
+Current native-preview defaults enforce a 2 MiB Markdown source limit and a
+20 MiB local-image limit. Local images are restricted to regular PNG, JPG, or
+GIF files within the saved Markdown file's directory tree. Renderer-process,
+Mermaid, MathJax, browser-network, timeout, and isolated-profile controls are
+implemented with their respective rendering slices rather than implied by the
+native-only path.
+
 ## Static-image boundary
 
 The embedded Mermaid and MathJax output is a high-quality static image:

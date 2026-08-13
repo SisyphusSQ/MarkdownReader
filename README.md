@@ -27,6 +27,14 @@ embedded images.
   file. Remote, missing, and unsupported images remain explicit placeholders.
 - Keep other link protocols inert and escape raw HTML.
 
+## Security defaults
+
+Markdown is treated as untrusted input. Raw HTML is escaped, `subl:` and other
+non-HTTP(S) links are inert, and remote images never load. Local images must be
+regular PNG, JPG, or GIF files inside the saved Markdown file's directory tree
+and no larger than 20 MiB. Markdown sources larger than 2 MiB show a diagnostic
+instead of entering the parser. These limits are measured in bytes.
+
 ## Goals
 
 - Open a Markdown reading view in a normal Sublime tab or a side-by-side group.

@@ -6,10 +6,17 @@ import sublime
 import sublime_plugin
 
 from .markdown_reader.preview import PreviewManager, choose_side_by_side_group
+from .markdown_reader.refresh import DebouncedRefreshScheduler, LivePreviewController
 from .markdown_reader.rendering import render_markdown
 
 LOGGER = logging.getLogger(__name__)
 PREVIEW_MANAGER = PreviewManager(render_markdown)
+REFRESH_SCHEDULER = DebouncedRefreshScheduler(sublime.set_timeout)
+LIVE_PREVIEW_CONTROLLER = LivePreviewController(
+    PREVIEW_MANAGER,
+    REFRESH_SCHEDULER,
+    sublime.Region,
+)
 
 
 def _open_preview(window, side_by_side):
@@ -44,3 +51,10 @@ class MarkdownReaderOpenPreviewSideBySideCommand(sublime_plugin.WindowCommand):
 
     def run(self):
         _open_preview(self.window, side_by_side=True)
+
+
+class MarkdownReaderLivePreviewListener(sublime_plugin.EventListener):
+    """Schedule a debounced update after the source buffer changes."""
+
+    def on_modified(self, view):
+        LIVE_PREVIEW_CONTROLLER.on_modified(view)

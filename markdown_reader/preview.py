@@ -30,18 +30,12 @@ class PreviewManager:
 
     def open_preview(self, window, source_view, region_factory, group=-1):
         """Render the source's current buffer and focus its preview sheet."""
-        source = source_view.substr(region_factory(0, source_view.size()))
-        contents = self._render(source)
-        source_name = source_view.name()
-        if not source_name:
-            file_name = source_view.file_name()
-            source_name = os.path.basename(file_name) if file_name else "Untitled"
-        title = "{} — Preview".format(source_name)
+        title, contents = self._render_preview(source_view, region_factory)
         key = (window.id(), source_view.id())
         sheet = self._sheets.get(key)
         target_group = window.active_group() if group == -1 else group
 
-        if sheet is None or sheet.window() is None:
+        if sheet is None or not self._is_sheet_in_window(sheet, window):
             sheet = window.new_html_sheet(title, contents, group=target_group)
             self._sheets[key] = sheet
             return sheet
@@ -53,3 +47,40 @@ class PreviewManager:
             window.set_sheet_index(sheet, target_group, -1)
         window.focus_sheet(sheet)
         return sheet
+
+    def has_preview(self, window, source_view):
+        """Return whether the source has an open preview in this window."""
+        key = (window.id(), source_view.id())
+        sheet = self._sheets.get(key)
+        if sheet is None:
+            return False
+        if not self._is_sheet_in_window(sheet, window):
+            self._sheets.pop(key, None)
+            return False
+        return True
+
+    def refresh_preview(self, window, source_view, region_factory):
+        """Update an open preview in place without moving or focusing it."""
+        key = (window.id(), source_view.id())
+        sheet = self._sheets.get(key)
+        if sheet is None or not self._is_sheet_in_window(sheet, window):
+            self._sheets.pop(key, None)
+            return None
+
+        title, contents = self._render_preview(source_view, region_factory)
+        sheet.set_name(title)
+        sheet.set_contents(contents)
+        return sheet
+
+    def _render_preview(self, source_view, region_factory):
+        source = source_view.substr(region_factory(0, source_view.size()))
+        source_name = source_view.name()
+        if not source_name:
+            file_name = source_view.file_name()
+            source_name = os.path.basename(file_name) if file_name else "Untitled"
+        return "{} — Preview".format(source_name), self._render(source)
+
+    @staticmethod
+    def _is_sheet_in_window(sheet, window):
+        owner = sheet.window()
+        return owner is not None and owner.id() == window.id()

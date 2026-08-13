@@ -50,6 +50,52 @@ class RendererEnvironmentDetectorTests(unittest.TestCase):
             environment.problems,
         )
 
+    def test_configured_paths_take_precedence_over_auto_discovery(self):
+        detector = RendererEnvironmentDetector(
+            configured_node_path="/configured/node",
+            configured_chrome_path="/configured/chrome",
+            which=lambda _name: "/auto/tool",
+            is_executable=lambda path: path in {
+                "/configured/node",
+                "/configured/chrome",
+                "/auto/tool",
+            },
+            chrome_candidates=lambda: ["/auto/chrome"],
+            read_node_version=lambda path: (
+                "v22.22.2" if path == "/configured/node" else "v20.0.0"
+            ),
+        )
+
+        environment = detector.detect()
+
+        self.assertTrue(environment.ready)
+        self.assertEqual("/configured/node", environment.node_path)
+        self.assertEqual("/configured/chrome", environment.chrome_path)
+
+    def test_invalid_configured_paths_are_not_silently_replaced(self):
+        detector = RendererEnvironmentDetector(
+            configured_node_path="/missing/node",
+            configured_chrome_path="/missing/chrome",
+            which=lambda _name: "/auto/tool",
+            is_executable=lambda path: path == "/auto/tool",
+            chrome_candidates=lambda: ["/auto/tool"],
+            read_node_version=lambda _path: "v22.22.2",
+        )
+
+        environment = detector.detect()
+
+        self.assertFalse(environment.ready)
+        self.assertEqual("", environment.node_path)
+        self.assertEqual("", environment.chrome_path)
+        self.assertIn(
+            "Configured Node.js executable is not executable: /missing/node",
+            environment.problems,
+        )
+        self.assertIn(
+            "Configured Chrome executable is not executable: /missing/chrome",
+            environment.problems,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

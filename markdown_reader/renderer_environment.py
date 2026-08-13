@@ -28,6 +28,8 @@ class RendererEnvironmentDetector:
         is_executable=None,
         chrome_candidates=None,
         read_node_version=None,
+        configured_node_path="",
+        configured_chrome_path="",
     ):
         self._which = which
         self._is_executable = is_executable or (
@@ -35,23 +37,54 @@ class RendererEnvironmentDetector:
         )
         self._chrome_candidates = chrome_candidates or self._default_chrome_candidates
         self._read_node_version = read_node_version or self._default_node_version
+        self._configured_node_path = configured_node_path
+        self._configured_chrome_path = configured_chrome_path
 
     def detect(self):
-        node_path = self._which("node") or self._first_executable(
-            ["/opt/homebrew/bin/node", "/usr/local/bin/node"]
-        )
-        chrome_path = self._first_executable(self._chrome_candidates())
-        if not chrome_path:
-            chrome_path = self._first_executable(
-                filter(None, (self._which(name) for name in ("google-chrome", "chromium", "chrome")))
+        problems = []
+        if self._configured_node_path:
+            if self._is_executable(self._configured_node_path):
+                node_path = self._configured_node_path
+            else:
+                node_path = ""
+                problems.append(
+                    "Configured Node.js executable is not executable: {}".format(
+                        self._configured_node_path
+                    )
+                )
+        else:
+            node_path = self._which("node") or self._first_executable(
+                ["/opt/homebrew/bin/node", "/usr/local/bin/node"]
             )
 
-        problems = []
+        if self._configured_chrome_path:
+            if self._is_executable(self._configured_chrome_path):
+                chrome_path = self._configured_chrome_path
+            else:
+                chrome_path = ""
+                problems.append(
+                    "Configured Chrome executable is not executable: {}".format(
+                        self._configured_chrome_path
+                    )
+                )
+        else:
+            chrome_path = self._first_executable(self._chrome_candidates())
+            if not chrome_path:
+                chrome_path = self._first_executable(
+                    filter(
+                        None,
+                        (
+                            self._which(name)
+                            for name in ("google-chrome", "chromium", "chrome")
+                        ),
+                    )
+                )
+
         node_version = ""
-        if not node_path or not self._is_executable(node_path):
+        if not node_path and not self._configured_node_path:
             node_path = ""
             problems.append("Node.js executable was not found")
-        else:
+        elif node_path:
             node_version = self._normalized_node_version(
                 self._read_node_version(node_path)
             )
@@ -63,7 +96,7 @@ class RendererEnvironmentDetector:
                         node_version
                     )
                 )
-        if not chrome_path:
+        if not chrome_path and not self._configured_chrome_path:
             problems.append("Chrome or Chromium executable was not found")
         return RendererEnvironment(node_path, node_version, chrome_path or "", problems)
 

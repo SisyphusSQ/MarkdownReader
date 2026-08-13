@@ -13,9 +13,11 @@ class SecurityPolicy:
         self,
         max_source_bytes=2 * 1024 * 1024,
         max_local_image_bytes=20 * 1024 * 1024,
+        allow_remote_images=False,
     ):
         self.max_source_bytes = max_source_bytes
         self.max_local_image_bytes = max_local_image_bytes
+        self.allow_remote_images = allow_remote_images
 
     def source_rejection_reason(self, source):
         """Return a diagnostic when a Markdown source exceeds its byte limit."""
@@ -82,6 +84,31 @@ class SecurityPolicy:
                 self.max_local_image_bytes
             )
         return image_path, None
+
+    def resolve_image_source(self, target, source_path):
+        """Return a safe local file URI or explicitly allowed HTTPS image URL."""
+        try:
+            parsed = urlsplit(target)
+            _ = parsed.port
+        except ValueError:
+            return None, "remote images are blocked"
+        if parsed.scheme or parsed.netloc:
+            if (
+                self.allow_remote_images
+                and parsed.scheme.lower() == "https"
+                and bool(parsed.hostname)
+                and parsed.username is None
+                and parsed.password is None
+                and not any(character.isspace() for character in target)
+                and "\\" not in target
+            ):
+                return target, None
+            return None, "remote images are blocked"
+
+        image_path, reason = self.resolve_local_image(target, source_path)
+        if reason:
+            return None, reason
+        return image_path.as_uri(), None
 
 
 DEFAULT_SECURITY_POLICY = SecurityPolicy()

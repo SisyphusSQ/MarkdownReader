@@ -12,7 +12,7 @@
         "command": "markdown_reader_open_full_preview_in_browser"
     },
     {
-        "caption": "MarkdownReader: Check Renderer Environment",
+        "caption": "MarkdownReader: Show Diagnostics",
         "command": "markdown_reader_check_renderer_environment"
     }
 ]

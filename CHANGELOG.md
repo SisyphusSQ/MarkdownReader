@@ -29,5 +29,10 @@ The project intends to use semantic versioning once it has an installable releas
   rejection, and unload cleanup.
 - Offline full-page browser preview with interactive Mermaid zoom, MathJax SVG,
   print/PDF export, embedded local images, strict CSP, and session-scoped cleanup.
+- Annotated settings for refresh timing, native-preview remote-image policy,
+  single-dollar math, and explicit Node.js/Chrome executable paths, with live
+  refresh of open previews after settings or theme changes.
+- A consolidated diagnostics command that reports effective settings, actionable
+  environment problems, renderer readiness, and bundled component versions.
 - Vendored Mistune 3.3.0 runtime subset with Python 3.8 compatibility adjustments.
 - Unit tests, a manual preview fixture, a project-local uv workflow, and CI checks.

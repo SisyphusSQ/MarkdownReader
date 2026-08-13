@@ -4,9 +4,10 @@
 class DebouncedRefreshScheduler:
     """Run only the newest scheduled callback for each source key."""
 
-    def __init__(self, schedule, delay_ms=250):
+    def __init__(self, schedule, delay_ms=250, delay_provider=None):
         self._schedule = schedule
         self._delay_ms = delay_ms
+        self._delay_provider = delay_provider
         self._generation = 0
         self._pending = {}
 
@@ -22,7 +23,12 @@ class DebouncedRefreshScheduler:
             del self._pending[key]
             callback()
 
-        self._schedule(run_if_current, self._delay_ms)
+        delay_ms = (
+            self._delay_provider()
+            if self._delay_provider is not None
+            else self._delay_ms
+        )
+        self._schedule(run_if_current, delay_ms)
 
     def cancel(self, key):
         """Invalidate the currently pending callback for a source key."""

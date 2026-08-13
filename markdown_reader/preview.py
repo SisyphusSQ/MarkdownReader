@@ -101,6 +101,29 @@ class PreviewManager:
             region_factory,
         )
 
+    def retain_special_results(
+        self,
+        window,
+        source_view,
+        renderer,
+        active_keys,
+    ):
+        """Prune historical results for one renderer while preserving others."""
+        key = (window.id(), source_view.id())
+        results = self._special_results.get(key)
+        if not results:
+            return
+        prefix = "{}:".format(renderer)
+        stale_keys = [
+            result_key
+            for result_key in results
+            if result_key.startswith(prefix) and result_key not in active_keys
+        ]
+        for result_key in stale_keys:
+            results.pop(result_key, None)
+        if not results:
+            self._special_results.pop(key, None)
+
     def _refresh_without_notification(self, window, source_view, region_factory):
         key = (window.id(), source_view.id())
         sheet = self._sheets[key]

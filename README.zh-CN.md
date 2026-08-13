@@ -6,8 +6,8 @@ MarkdownReader 是 Sublime Text 4 的原生 Markdown 阅读与实时预览插件
 普通 Markdown 内容由 Sublime `HtmlSheet` 展示，Mermaid 图表与 MathJax 公式
 则通过本地无界面浏览器离线渲染为内嵌图片。
 
-> 当前状态：正在开发 0.1.0。第一个原生预览纵向切片已可从源码使用，
-> 尚未发布正式版本。
+> 最新版本：[0.1.0](https://github.com/SisyphusSQ/MarkdownReader/releases/tag/0.1.0)。
+> Package Control 收录会在首个 GitHub 版本经过真实使用验证后再单独推进。
 
 ## 当前可用能力
 
@@ -66,8 +66,8 @@ Markdown 一律视为不可信输入。原始 HTML 会被转义，`subl:` 等非
 转换为 data URI，原始 HTML 仍被转义，Mermaid 使用 strict 模式并移除活动链接；
 Content Security Policy 会阻断网络、文件、frame、form、media 与 object 资源。
 单个浏览器页面的所有内嵌本地图片另有 40 MiB 总预算。自包含 HTML 只写入操作系统
-私有临时目录，不写入 Markdown 项目，并在插件卸载时清理。该页面是当前缓冲区的
-一次性快照；编辑后需要重新执行命令。
+私有临时目录，不写入 Markdown 项目；交给浏览器后会很快过期，插件卸载和下次启动
+也会清理所属遗留文件。该页面是当前缓冲区的一次性快照；编辑后需要重新执行命令。
 
 ## 目标
 
@@ -80,9 +80,12 @@ Content Security Policy 会阻断网络、文件、frame、form、media 与 obje
 
 ## 兼容目标
 
-- 计划最低支持 Sublime Text Build 4065 或更高，最终以实现所用 API 为准。
-- 第一轮 PoC 以 Sublime Text 4 Build 4200 为目标。
+- 已验证发布环境：macOS 上的 Sublime Text 4 Build 4200。
+- API 兼容目标为 Build 4065 或更高，但 0.1.0 尚未在每个较旧 Build 和操作系统上
+  完成同等强度的端到端验证。
 - Sublime 插件 API 环境使用 Python 3.8。
+- Mermaid 与 MathJax 渲染需要 Node.js 22.12 或更新版本以及 Chrome/Chromium。
+  缺少这些工具时普通 Markdown 仍可预览，特殊块会显示隔离错误。
 
 ## 设计文档
 
@@ -90,6 +93,29 @@ Content Security Policy 会阻断网络、文件、frame、form、media 与 obje
 [docs/design/details/markdown-reader/sublime-markdown-reader.md](docs/design/details/markdown-reader/sublime-markdown-reader.md)。
 
 仓库根目录同时也是 Sublime package 根目录。
+
+## 安装 0.1.0
+
+从 [0.1.0 Release](https://github.com/SisyphusSQ/MarkdownReader/releases/tag/0.1.0)
+下载 `MarkdownReader.sublime-package` 与 `SHA256SUMS`。包文件名必须保持为
+`MarkdownReader.sublime-package`，因为它同时是内置 renderer 使用的 Sublime
+资源命名空间。
+
+可在两个文件所在目录校验下载内容：
+
+```bash
+shasum -a 256 -c SHA256SUMS
+```
+
+退出 Sublime Text，把包复制到 `Installed Packages` 后重新启动。标准 macOS
+安装可执行：
+
+```bash
+cp MarkdownReader.sublime-package \
+  "$HOME/Library/Application Support/Sublime Text/Installed Packages/MarkdownReader.sublime-package"
+```
+
+不要同时用相同包名安装 release 包和源码软链接。
 
 ## 从源码安装
 
@@ -124,9 +150,48 @@ cache；固定版本的 Mermaid、MathJax 与 `puppeteer-core` 已提交为单�
 不会写入磁盘。独立的 browser-preview bundle 也随插件分发，在现代默认浏览器内
 运行，不请求 CDN。
 
+构建可复现 release 包和校验文件：
+
+```bash
+.venv/bin/python scripts/build_release_package.py \
+  --checksum-output dist/SHA256SUMS
+```
+
+发布包只包含运行时 Python 文件、设置与菜单资源、安装用户需要的文档、vendored
+Mistune 子集以及两个已提交 renderer bundle；不会混入测试、JavaScript 构建源码、
+`node_modules` 或开发依赖。
+
+## 故障排查
+
+优先执行 **MarkdownReader: Show Diagnostics**。健康状态应显示
+`Renderer: READY`、实际 Node.js/Chrome 路径、协议版本 3，以及固定的 Mermaid、
+MathJax 和 Puppeteer 版本。
+
+- 如果找不到 Node.js 或 Chrome，可通过 `node_path` / `chrome_path` 设置绝对可执行
+  文件路径；GUI 应用不一定继承交互式 shell 的 `PATH`。
+- 显式工具路径具有最高优先级。目标缺失或不可执行时会直接报告该路径，不会静默
+  选择另一个工具。
+- renderer 资源会在首次使用时自动提取到 Sublime cache；不要在安装包内执行
+  `npm install`。
+- 单个 Mermaid 或 MathJax 内容错误只会形成局部错误面板，不会阻断整篇文档。
+- 浏览器命令生成一次性快照；编辑后需重新执行，持续刷新请使用原生预览。
+
+## 已知限制
+
+- 0.1.0 已在 macOS + Sublime Text Build 4200 完整验证；其他平台和较旧 Build 仍需
+  更广泛的真实使用验证。
+- 原生预览中的 Mermaid/MathJax 是静态 PNG；交互缩放、浏览器打印与 PDF 导出只在
+  浏览器完整预览中提供。
+- 本地图片仅支持已保存 Markdown 所在目录树内的 PNG、JPG、GIF；未保存文档无法
+  解析相对图片。
+- HTTPS 远程图片必须在原生预览中显式启用，浏览器完整预览始终禁用远程图片。
+- 浏览器预览是快照，不会继续跟随编辑内容更新。
+- 本版本尚未提交 Package Control 收录；请安装 GitHub Release 资产或源码版本。
+
 ## 发布
 
-当前没有 release。首个语义化版本 tag 将在插件具备可安装能力且完成 PoC 后创建；
+发布说明见
+[docs/release-notes/0.1.0.md](https://github.com/SisyphusSQ/MarkdownReader/blob/0.1.0/docs/release-notes/0.1.0.md)。
 后续 Package Control 收录将使用本仓库的 tag-based release。
 
 ## License

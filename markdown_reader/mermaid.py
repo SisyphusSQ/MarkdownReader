@@ -113,6 +113,14 @@ def mermaid_theme_for_background(background):
     return "dark" if luminance < 128 else "default"
 
 
+def mermaid_theme_for_styles(view_style, scope_style):
+    """Resolve the editor background from View.style before scope details."""
+    view_style = view_style or {}
+    scope_style = scope_style or {}
+    background = view_style.get("background") or scope_style.get("background", "")
+    return mermaid_theme_for_background(background)
+
+
 class MermaidController:
     """Render Mermaid blocks off the UI thread and apply only current results."""
 

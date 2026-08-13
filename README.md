@@ -7,8 +7,9 @@ Sublime Text 4. It is designed to keep normal Markdown content inside a Sublime
 `HtmlSheet`, while rendering Mermaid diagrams and MathJax formulas locally as
 embedded images.
 
-> Project status: active 0.1.0 development. The first native-preview slice is
-> usable from a source checkout; no release has been published yet.
+> Latest release: [0.1.0](https://github.com/SisyphusSQ/MarkdownReader/releases/tag/0.1.0).
+> Package Control submission is intentionally deferred until after the first
+> GitHub release has received real-world validation.
 
 ## Available now
 
@@ -80,8 +81,9 @@ escaped, Mermaid uses strict mode with active links removed, and a Content
 Security Policy blocks network, file, frame, form, media, and object resources.
 All embedded local images share an additional 40 MiB document budget. The
 self-contained HTML is written to a private operating-system temporary
-directory, never to the Markdown project, and is removed when the plugin
-unloads. It is a point-in-time snapshot; run the command again after editing.
+directory, never to the Markdown project, and expires shortly after it is handed
+to the browser. Plugin unload and the next startup also prune owned stale
+artifacts. It is a point-in-time snapshot; run the command again after editing.
 
 ## Goals
 
@@ -96,10 +98,13 @@ unloads. It is a point-in-time snapshot; run the command again after editing.
 
 ## Compatibility target
 
-- Minimum planned Sublime Text build: 4065 or newer, subject to the APIs used
-  by the implementation.
-- Initial proof-of-concept target: Sublime Text 4 Build 4200.
+- Verified release environment: Sublime Text 4 Build 4200 on macOS.
+- Builds 4065 and newer are the API compatibility target, but 0.1.0 has not
+  received the same end-to-end coverage on every older build or operating system.
 - Sublime plugin API environment: Python 3.8.
+- Mermaid and MathJax rendering requires Node.js 22.12 or newer plus Chrome or
+  Chromium. Core Markdown preview remains available when those tools are absent,
+  with special blocks showing isolated errors.
 
 ## Design
 
@@ -108,6 +113,30 @@ are documented in
 [docs/design/details/markdown-reader/sublime-markdown-reader.md](docs/design/details/markdown-reader/sublime-markdown-reader.md).
 
 The repository root is also the Sublime package root.
+
+## Install 0.1.0
+
+Download `MarkdownReader.sublime-package` and `SHA256SUMS` from the
+[0.1.0 release](https://github.com/SisyphusSQ/MarkdownReader/releases/tag/0.1.0).
+Keep the package filename exactly `MarkdownReader.sublime-package`, because that
+name is also the Sublime resource namespace used by the bundled renderer.
+
+Optionally verify the download from the directory containing both files:
+
+```bash
+shasum -a 256 -c SHA256SUMS
+```
+
+Quit Sublime Text, copy the package into its `Installed Packages` directory,
+then restart Sublime. On a standard macOS installation:
+
+```bash
+cp MarkdownReader.sublime-package \
+  "$HOME/Library/Application Support/Sublime Text/Installed Packages/MarkdownReader.sublime-package"
+```
+
+Do not install the release package and a source checkout under the same package
+name at the same time.
 
 ## Install from source
 
@@ -147,11 +176,57 @@ memory, are cleared when the plugin unloads, and are never written to disk.
 The separate browser-preview bundle is also included in the package and runs
 inside a modern default browser without a CDN request.
 
+Build the deterministic release package and checksum file with:
+
+```bash
+.venv/bin/python scripts/build_release_package.py \
+  --checksum-output dist/SHA256SUMS
+```
+
+The package contains only runtime Python files, settings/menu resources,
+documentation needed by an installed user, the vendored Mistune subset, and the
+two committed renderer bundles. It excludes tests, source modules for the
+JavaScript build, `node_modules`, and development dependencies.
+
+## Troubleshooting
+
+Run **MarkdownReader: Show Diagnostics** first. A healthy report shows
+`Renderer: READY`, the active Node.js and Chrome paths, protocol version 3, and
+the pinned Mermaid, MathJax, and Puppeteer versions.
+
+- If Node.js or Chrome is not found, set the absolute executable path through
+  `node_path` or `chrome_path`. GUI applications may not inherit the same `PATH`
+  as an interactive shell.
+- A configured tool path is authoritative. If it is missing or not executable,
+  diagnostics reports that path instead of silently selecting a different tool.
+- Renderer resources are extracted automatically into Sublime's cache on first
+  use. Do not run `npm install` inside the installed package.
+- One malformed Mermaid block or MathJax formula becomes a local error panel;
+  it does not prevent the rest of the document from rendering.
+- The browser command creates a point-in-time page. Run it again after editing,
+  and use the native preview when continuous refresh is required.
+
+## Known limitations
+
+- The 0.1.0 release is fully exercised on macOS with Sublime Text Build 4200;
+  other supported-looking platforms and older builds still need broader field
+  validation.
+- Native previews render Mermaid and MathJax as static PNG images. Interactive
+  Mermaid zoom and browser printing/PDF export are available only in the full
+  browser preview.
+- Local images are limited to PNG, JPG, and GIF inside the saved Markdown
+  document's directory tree. Unsaved documents cannot resolve relative images.
+- HTTPS remote images are an explicit native-preview opt-in and remain disabled
+  in the full browser preview.
+- The browser preview is a snapshot and is not kept in sync with later edits.
+- Package Control installation is not part of this release; install the GitHub
+  release asset or a source checkout.
+
 ## Releases
 
-There are no releases yet. The first semantic version tag will be created only
-after an installable package has passed its planned proof of concept. A future
-Package Control submission will reference tag-based releases from this
+Release notes are available in
+[docs/release-notes/0.1.0.md](https://github.com/SisyphusSQ/MarkdownReader/blob/0.1.0/docs/release-notes/0.1.0.md).
+A future Package Control submission will reference tag-based releases from this
 repository.
 
 ## License

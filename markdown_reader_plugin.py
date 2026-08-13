@@ -10,13 +10,17 @@ import webbrowser
 import sublime
 import sublime_plugin
 
-from .markdown_reader.browser_preview import BrowserPreviewFiles, BrowserPreviewService
+from .markdown_reader.browser_preview import (
+    BrowserPreviewFiles,
+    BrowserPreviewService,
+    cleanup_stale_browser_preview_directories,
+)
 from .markdown_reader.diagnostics import format_diagnostics
 from .markdown_reader.mathjax import MathJaxController, MathRenderOptions
 from .markdown_reader.mermaid import (
     MermaidController,
     MermaidRenderOptions,
-    mermaid_theme_for_background,
+    mermaid_theme_for_styles,
 )
 from .markdown_reader.preview import PreviewManager, choose_side_by_side_group
 from .markdown_reader.refresh import DebouncedRefreshScheduler, LivePreviewController
@@ -77,10 +81,17 @@ def _open_system_browser(uri):
     return webbrowser.open(uri, new=2)
 
 
+def _schedule_browser_artifact_cleanup(callback, delay_ms):
+    timer = threading.Timer(delay_ms / 1000, callback)
+    timer.daemon = True
+    timer.start()
+
+
 BROWSER_PREVIEW_SERVICE = BrowserPreviewService(
     runtime_loader=_load_browser_preview_runtime,
     files=BROWSER_PREVIEW_FILES,
     opener=_open_system_browser,
+    schedule_cleanup=_schedule_browser_artifact_cleanup,
 )
 
 
@@ -147,19 +158,24 @@ def _detect_renderer_environment():
     ).detect()
 
 
+def _renderer_theme(source_view):
+    return mermaid_theme_for_styles(
+        source_view.style(),
+        source_view.style_for_scope("text"),
+    )
+
+
 def _mermaid_render_options(source_view):
-    style = source_view.style_for_scope("text") or {}
     viewport_width, _ = source_view.viewport_extent()
     target_width = max(320, min(1600, int(viewport_width) - 64))
     return MermaidRenderOptions(
-        theme=mermaid_theme_for_background(style.get("background", "")),
+        theme=_renderer_theme(source_view),
         width=target_width,
         scale=2,
     )
 
 
 def _mathjax_render_options(source_view):
-    style = source_view.style_for_scope("text") or {}
     viewport_width, _ = source_view.viewport_extent()
     target_width = max(320, min(1600, int(viewport_width) - 64))
     configured_font_size = source_view.settings().get("font_size", 16)
@@ -168,7 +184,7 @@ def _mathjax_render_options(source_view):
     except (TypeError, ValueError):
         font_size = 16
     return MathRenderOptions(
-        theme=mermaid_theme_for_background(style.get("background", "")),
+        theme=_renderer_theme(source_view),
         width=target_width,
         scale=2,
         font_size=max(8, min(64, font_size)),
@@ -209,6 +225,7 @@ PREVIEW_MANAGER.set_after_render(_render_special_blocks)
 
 
 def plugin_loaded():
+    cleanup_stale_browser_preview_directories()
     package_settings = sublime.load_settings(PACKAGE_SETTINGS_FILE)
     preferences = sublime.load_settings(PREFERENCES_FILE)
     package_settings.clear_on_change(PACKAGE_SETTINGS_CHANGE_KEY)
@@ -308,12 +325,7 @@ class MarkdownReaderOpenFullPreviewInBrowserCommand(sublime_plugin.WindowCommand
         title = source_view.name()
         if not title:
             title = os.path.basename(source_path) if source_path else "Untitled"
-        style = source_view.style_for_scope("text") or {}
-        theme = (
-            "dark"
-            if mermaid_theme_for_background(style.get("background", "")) == "dark"
-            else "light"
-        )
+        theme = "dark" if _renderer_theme(source_view) == "dark" else "light"
         window_id = self.window.id()
         view_id = source_view.id()
         allow_single_dollar_math = _single_dollar_math_enabled()

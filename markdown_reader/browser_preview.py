@@ -29,6 +29,7 @@ _CONTENT_SECURITY_POLICY = (
     "style-src 'unsafe-inline'"
 )
 MAX_EMBEDDED_IMAGE_BYTES = 40 * 1024 * 1024
+BROWSER_PREVIEW_DIRECTORY_PREFIX = "markdown-reader-browser-"
 _DOCUMENT_STYLE = """
 :root {
     color-scheme: light;
@@ -112,13 +113,60 @@ img.local-image { display: block; max-width: 100%; height: auto; margin: 1rem au
 """
 
 
+def cleanup_stale_browser_preview_directories(
+    directory=None,
+    current_process_id=None,
+    is_process_alive=None,
+):
+    """Remove browser-preview directories not owned by a live plugin host."""
+    root = Path(directory) if directory else Path(tempfile.gettempdir())
+    current_process_id = current_process_id or os.getpid()
+    is_process_alive = is_process_alive or _is_process_alive
+    removed = 0
+    try:
+        candidates = list(root.iterdir())
+    except OSError:
+        return removed
+    for candidate in candidates:
+        if not candidate.name.startswith(BROWSER_PREVIEW_DIRECTORY_PREFIX):
+            continue
+        if candidate.is_symlink() or not candidate.is_dir():
+            continue
+        suffix = candidate.name[len(BROWSER_PREVIEW_DIRECTORY_PREFIX) :]
+        process_text = suffix.split("-", 1)[0]
+        process_id = int(process_text) if process_text.isdigit() else None
+        if process_id == current_process_id:
+            continue
+        if process_id is not None and is_process_alive(process_id):
+            continue
+        shutil.rmtree(str(candidate), ignore_errors=True)
+        if not candidate.exists():
+            removed += 1
+    return removed
+
+
+def _is_process_alive(process_id):
+    try:
+        os.kill(process_id, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
 class BrowserPreviewFiles:
     """Own private, session-scoped browser preview artifacts."""
 
-    def __init__(self, directory=None):
+    def __init__(self, directory=None, temporary_root=None, process_id=None):
         self._configured_directory = Path(directory) if directory else None
+        self._temporary_root = (
+            Path(temporary_root) if temporary_root else Path(tempfile.gettempdir())
+        )
+        self._process_id = process_id or os.getpid()
         self._directory = None
         self._lock = threading.Lock()
+        self._generations = {}
 
     def write(self, window_id, view_id, html):
         """Atomically replace the one preview artifact owned by a source view."""
@@ -127,6 +175,7 @@ class BrowserPreviewFiles:
         with self._lock:
             directory = self._ensure_directory_unlocked()
             destination = directory / name
+            generation = self._generations.get(destination, 0) + 1
             descriptor, temporary_path = tempfile.mkstemp(
                 dir=str(directory),
                 prefix=".preview-",
@@ -139,13 +188,46 @@ class BrowserPreviewFiles:
             finally:
                 if os.path.exists(temporary_path):
                     os.unlink(temporary_path)
+            self._generations[destination] = generation
             return destination
+
+    def schedule_cleanup(self, path, scheduler, delay_ms):
+        """Remove this exact artifact generation after the browser has loaded it."""
+        path = Path(path)
+        with self._lock:
+            generation = self._generations.get(path)
+        scheduler(lambda: self.remove(path, generation), delay_ms)
+
+    def remove(self, path, generation=None):
+        """Remove an owned artifact unless a newer generation replaced it."""
+        path = Path(path)
+        with self._lock:
+            directory = self._directory
+            if directory is None or path.parent != directory:
+                return False
+            if generation is not None and self._generations.get(path) != generation:
+                return False
+            try:
+                path.unlink()
+            except FileNotFoundError:
+                pass
+            except OSError:
+                return False
+            self._generations.pop(path, None)
+            try:
+                directory.rmdir()
+            except OSError:
+                pass
+            else:
+                self._directory = None
+            return True
 
     def cleanup(self):
         """Remove every preview artifact created by this plugin session."""
         with self._lock:
             directory = self._directory
             self._directory = None
+            self._generations.clear()
             if directory is not None:
                 shutil.rmtree(str(directory), ignore_errors=True)
 
@@ -153,7 +235,16 @@ class BrowserPreviewFiles:
         if self._directory is not None:
             return self._directory
         if self._configured_directory is None:
-            directory = Path(tempfile.mkdtemp(prefix="markdown-reader-browser-"))
+            self._temporary_root.mkdir(mode=0o700, parents=True, exist_ok=True)
+            directory = Path(
+                tempfile.mkdtemp(
+                    prefix="{}{}-".format(
+                        BROWSER_PREVIEW_DIRECTORY_PREFIX,
+                        self._process_id,
+                    ),
+                    dir=str(self._temporary_root),
+                )
+            )
         else:
             directory = self._configured_directory
             directory.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -168,10 +259,19 @@ class BrowserPreviewFiles:
 class BrowserPreviewService:
     """Build one browser document and hand its URI to the system browser."""
 
-    def __init__(self, runtime_loader, files, opener):
+    def __init__(
+        self,
+        runtime_loader,
+        files,
+        opener,
+        schedule_cleanup=None,
+        cleanup_delay_ms=10_000,
+    ):
         self._runtime_loader = runtime_loader
         self._files = files
         self._opener = opener
+        self._schedule_cleanup = schedule_cleanup
+        self._cleanup_delay_ms = cleanup_delay_ms
         self._lock = threading.Lock()
         self._closed = False
 
@@ -199,7 +299,14 @@ class BrowserPreviewService:
             )
             artifact = self._files.write(window_id, view_id, html)
             if not self._opener(artifact.as_uri()):
+                self._files.remove(artifact)
                 raise RuntimeError("default browser could not be opened")
+            if self._schedule_cleanup is not None:
+                self._files.schedule_cleanup(
+                    artifact,
+                    self._schedule_cleanup,
+                    self._cleanup_delay_ms,
+                )
             return artifact
 
     def close(self):

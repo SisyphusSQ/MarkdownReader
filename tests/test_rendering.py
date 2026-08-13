@@ -3,6 +3,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from markdown_reader.rendering import render_markdown
+from markdown_reader.security import SecurityPolicy
 
 
 class MarkdownRenderingTests(unittest.TestCase):
@@ -153,6 +154,16 @@ if value < 10:
 
         self.assertNotIn("<img", html)
         self.assertIn("save the Markdown file to resolve this image", html)
+
+    def test_oversized_source_returns_fixed_diagnostic_without_parsing(self):
+        source = "# must not render"
+
+        html = render_markdown(source, policy=SecurityPolicy(max_source_bytes=4))
+
+        self.assertIn('<div class="security-error">', html)
+        self.assertIn("Markdown source exceeds the 4-byte preview limit", html)
+        self.assertNotIn("<h1>", html)
+        self.assertNotIn("must not render", html)
 
     def test_escapes_raw_html(self):
         html = render_markdown('<script>alert("unsafe")</script>')

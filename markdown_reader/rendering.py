@@ -1,22 +1,19 @@
 """Convert Markdown into a self-contained minihtml document."""
 
-from pathlib import Path
-from urllib.parse import unquote, urlsplit
-
+from .security import DEFAULT_SECURITY_POLICY
 from .vendor.mistune import create_markdown
 from .vendor.mistune.plugins.task_lists import task_lists
 from .vendor.mistune.renderers.html import HTMLRenderer
 from .vendor.mistune.util import escape, escape_url, striptags
 
-_LOCAL_IMAGE_EXTENSIONS = {".gif", ".jpeg", ".jpg", ".png"}
-
 
 class MinihtmlRenderer(HTMLRenderer):
     """Render only the inert Markdown subset supported by the first release slice."""
 
-    def __init__(self, source_path=None):
+    def __init__(self, source_path=None, policy=DEFAULT_SECURITY_POLICY):
         super().__init__(escape=True)
         self._source_path = source_path
+        self._policy = policy
 
     def render_token(self, token, state):
         """Render ordered lists with explicit markers minihtml can display."""
@@ -70,8 +67,7 @@ class MinihtmlRenderer(HTMLRenderer):
 
     def link(self, text, url, title=None):
         """Activate only absolute HTTP(S) links supported by HtmlSheet."""
-        parsed = urlsplit(url)
-        if parsed.scheme.lower() not in ("http", "https") or not parsed.netloc:
+        if not self._policy.allows_link(url):
             return text
         link = '<a href="{}"'.format(escape(escape_url(url)))
         if title:
@@ -81,24 +77,9 @@ class MinihtmlRenderer(HTMLRenderer):
     def image(self, text, url, title=None):
         """Render supported local images without performing network access."""
         alt = striptags(text) or "untitled"
-        parsed = urlsplit(url)
-        if parsed.scheme or parsed.netloc:
-            return self._image_placeholder(alt, "remote images are blocked")
-
-        image_path = Path(unquote(parsed.path)).expanduser()
-        if not image_path.is_absolute():
-            if not self._source_path:
-                return self._image_placeholder(
-                    alt,
-                    "save the Markdown file to resolve this image",
-                )
-            image_path = Path(self._source_path).parent / image_path
-        image_path = image_path.resolve()
-
-        if image_path.suffix.lower() not in _LOCAL_IMAGE_EXTENSIONS:
-            return self._image_placeholder(alt, "unsupported image format")
-        if not image_path.is_file():
-            return self._image_placeholder(alt, "local image not found")
+        image_path, reason = self._policy.resolve_local_image(url, self._source_path)
+        if reason:
+            return self._image_placeholder(alt, reason)
 
         image = '<img class="local-image" src="{}" alt="{}"'.format(
             escape(image_path.as_uri()),
@@ -196,8 +177,13 @@ div.code-block code {
 _DOCUMENT_SUFFIX = "</body>\n</html>\n"
 
 
-def render_markdown(source, source_path=None):
+def render_markdown(source, source_path=None, policy=DEFAULT_SECURITY_POLICY):
     """Return theme-aware minihtml for a Markdown source string."""
-    renderer = MinihtmlRenderer(source_path=source_path)
+    rejection_reason = policy.source_rejection_reason(source)
+    if rejection_reason:
+        diagnostic = '<div class="security-error">{}</div>\n'.format(escape(rejection_reason))
+        return _DOCUMENT_PREFIX + diagnostic + _DOCUMENT_SUFFIX
+
+    renderer = MinihtmlRenderer(source_path=source_path, policy=policy)
     markdown = create_markdown(renderer=renderer, plugins=[task_lists])
     return _DOCUMENT_PREFIX + markdown(source) + _DOCUMENT_SUFFIX

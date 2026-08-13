@@ -24,6 +24,13 @@ MarkdownReader 是 Sublime Text 4 的原生 Markdown 阅读与实时预览插件
   图片显示明确占位信息。
 - 其他链接协议保持不可点击，原始 HTML 会被转义。
 
+## 默认安全策略
+
+Markdown 一律视为不可信输入。原始 HTML 会被转义，`subl:` 等非 HTTP(S) 链接
+不可点击，远程图片不会加载。本地图片必须是已保存 Markdown 所在目录树内的普通
+PNG、JPG 或 GIF 文件，且不超过 20 MiB；超过 2 MiB 的 Markdown 源文件不会进入
+解析器，而会显示诊断信息。以上上限均按字节计算。
+
 ## 目标
 
 - 在 Sublime 普通标签页或左右分栏中打开 Markdown 阅读视图。

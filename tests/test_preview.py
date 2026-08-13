@@ -1,6 +1,6 @@
 import unittest
 
-from markdown_reader.preview import PreviewManager
+from markdown_reader.preview import PreviewManager, choose_side_by_side_group
 
 
 def make_region(start, end):
@@ -34,10 +34,11 @@ class FakeView:
 
 
 class FakeSheet:
-    def __init__(self, owner, name, contents):
+    def __init__(self, owner, name, contents, group):
         self.owner = owner
         self.name = name
         self.contents = contents
+        self.group = group
         self.content_updates = []
         self.name_updates = []
 
@@ -54,18 +55,40 @@ class FakeSheet:
 
 
 class FakeWindow:
-    def __init__(self, window_id):
+    def __init__(self, window_id, active_group=0, num_groups=1):
         self._window_id = window_id
+        self._active_group = active_group
+        self._num_groups = num_groups
         self.created_sheets = []
         self.focused_sheets = []
+        self.layout_updates = []
+        self.moved_sheets = []
 
     def id(self):
         return self._window_id
 
-    def new_html_sheet(self, name, contents):
-        sheet = FakeSheet(self, name, contents)
+    def active_group(self):
+        return self._active_group
+
+    def num_groups(self):
+        return self._num_groups
+
+    def set_layout(self, layout):
+        self.layout_updates.append(layout)
+        self._num_groups = len(layout["cells"])
+
+    def new_html_sheet(self, name, contents, group=-1):
+        target_group = self._active_group if group == -1 else group
+        sheet = FakeSheet(self, name, contents, target_group)
         self.created_sheets.append(sheet)
         return sheet
+
+    def get_sheet_index(self, sheet):
+        return (sheet.group, self.created_sheets.index(sheet))
+
+    def set_sheet_index(self, sheet, group, index):
+        sheet.group = group
+        self.moved_sheets.append((sheet, group, index))
 
     def focus_sheet(self, sheet):
         self.focused_sheets.append(sheet)
@@ -116,6 +139,24 @@ class PreviewManagerTests(unittest.TestCase):
             self.rendered_sources,
         )
 
+    def test_creates_preview_in_requested_group(self):
+        window = FakeWindow(11, num_groups=2)
+
+        sheet = self.manager.open_preview(window, self.view, make_region, group=1)
+
+        self.assertEqual(1, sheet.group)
+
+    def test_moves_existing_preview_to_requested_group(self):
+        window = FakeWindow(11, num_groups=2)
+        sheet = self.manager.open_preview(window, self.view, make_region, group=0)
+
+        updated_sheet = self.manager.open_preview(window, self.view, make_region, group=1)
+
+        self.assertIs(sheet, updated_sheet)
+        self.assertEqual(1, sheet.group)
+        self.assertEqual([(sheet, 1, -1)], window.moved_sheets)
+        self.assertEqual([sheet], window.focused_sheets)
+
     def test_uses_untitled_name_when_source_has_no_name(self):
         view = FakeView(33, "", "draft")
 
@@ -129,6 +170,41 @@ class PreviewManagerTests(unittest.TestCase):
         sheet = self.manager.open_preview(self.window, view, make_region)
 
         self.assertEqual("guide.md — Preview", sheet.name)
+
+
+class SideBySideGroupTests(unittest.TestCase):
+    def test_single_group_becomes_two_equal_columns(self):
+        window = FakeWindow(11)
+
+        target_group = choose_side_by_side_group(window)
+
+        self.assertEqual(1, target_group)
+        self.assertEqual(
+            [
+                {
+                    "cols": [0.0, 0.5, 1.0],
+                    "rows": [0.0, 1.0],
+                    "cells": [[0, 0, 1, 1], [1, 0, 2, 1]],
+                }
+            ],
+            window.layout_updates,
+        )
+
+    def test_existing_layout_is_preserved_and_next_group_is_used(self):
+        window = FakeWindow(11, active_group=1, num_groups=3)
+
+        target_group = choose_side_by_side_group(window)
+
+        self.assertEqual(2, target_group)
+        self.assertEqual([], window.layout_updates)
+
+    def test_last_existing_group_uses_previous_group(self):
+        window = FakeWindow(11, active_group=2, num_groups=3)
+
+        target_group = choose_side_by_side_group(window)
+
+        self.assertEqual(1, target_group)
+        self.assertEqual([], window.layout_updates)
 
 
 if __name__ == "__main__":

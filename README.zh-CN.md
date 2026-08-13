@@ -12,6 +12,8 @@ MarkdownReader 是 Sublime Text 4 的原生 Markdown 阅读与实时预览插件
 ## 当前可用能力
 
 - 通过 **MarkdownReader: Open Preview** 预览当前 Markdown 缓冲区。
+- 通过 **MarkdownReader: Open Preview Side by Side** 在相邻 group 打开或移动预览；
+  单 group 窗口会变为等宽双栏，已有多 group 布局保持不变。
 - 在跟随 Sublime 主题的原生 `HtmlSheet` 中展示尚未保存的编辑内容。
 - 再次执行命令时复用并更新同一个预览标签页。
 - 渲染标题、段落、强调、引用、列表和围栏代码块。

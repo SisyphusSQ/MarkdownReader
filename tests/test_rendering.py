@@ -71,15 +71,15 @@ if value < 10:
         self.assertIn("white-space: pre-wrap", html)
         self.assertNotIn("<pre>", html)
 
-    def test_mermaid_block_starts_as_placeholder_and_preserves_source(self):
+    def test_mermaid_block_starts_as_placeholder_without_visible_source(self):
         source = "```mermaid\nflowchart LR\nA --> B\n```\n"
 
         html = render_markdown(source)
 
         self.assertIn('class="mermaid-status"', html)
         self.assertIn("Rendering Mermaid diagram", html)
-        self.assertIn("flowchart LR\nA --&gt; B", html)
-        self.assertIn('class="language-mermaid"', html)
+        self.assertNotIn("flowchart LR", html)
+        self.assertNotIn('class="mermaid-source"', html)
 
     def test_mermaid_block_embeds_validated_png_result(self):
         diagram = "flowchart LR\nA --> B\n"
@@ -100,7 +100,8 @@ if value < 10:
         )
         self.assertIn('width="320" height="120"', html)
         self.assertNotIn("Rendering Mermaid diagram", html)
-        self.assertIn("flowchart LR", html)
+        self.assertNotIn("flowchart LR", html)
+        self.assertNotIn('class="mermaid-source"', html)
 
     def test_mermaid_error_is_escaped_and_keeps_the_document_readable(self):
         diagram = "not a diagram\n"
@@ -194,28 +195,142 @@ if value < 10:
         self.assertNotIn("<a ", html)
         self.assertNotIn("subl:save", html)
 
-    def test_renders_task_lists_with_static_markers(self):
+    def test_renders_compact_task_lists_with_checkbox_states_and_nested_guide(self):
         html = render_markdown(
-            "- [ ] draft\n- [x] shipped\n- [X] verified\n- regular item\n\n"
+            "- [ ] draft\n- [x] shipped\n  - [ ] nested task\n"
+            "- [X] verified\n- regular item\n\n"
             "1. [ ] ordered task\n2. [x] ordered done\n"
         )
 
         self.assertIn('<div class="task-list">', html)
-        self.assertIn('<strong class="task-marker">☐</strong> draft', html)
-        self.assertIn('<strong class="task-marker">☑</strong> shipped', html)
-        self.assertIn('<strong class="task-marker">☑</strong> verified', html)
-        self.assertIn('<strong class="task-marker">•</strong> regular item', html)
+        self.assertIn(
+            '<div class="task-list-item task-list-item-open">'
+            '<strong class="task-marker task-marker-open">✓</strong> '
+            '<div class="task-label">draft</div></div>',
+            html,
+        )
+        self.assertIn(
+            '<div class="task-list-item task-list-item-checked">'
+            '<strong class="task-marker task-marker-checked">✓</strong> '
+            '<div class="task-label task-label-checked">shipped</div>',
+            html,
+        )
+        self.assertIn(
+            '<strong class="task-marker task-marker-open">✓</strong> '
+            '<div class="task-label">nested task</div>',
+            html,
+        )
+        self.assertIn(
+            '<div class="task-label task-label-checked">verified</div>', html
+        )
+        self.assertIn(
+            '<strong class="task-marker task-marker-bullet">•</strong> '
+            '<div class="task-label">regular item</div>',
+            html,
+        )
         self.assertIn(
             '<strong class="ordered-marker">1.</strong> '
-            '<strong class="task-marker">☐</strong> ordered task',
+            '<strong class="task-marker task-marker-open">✓</strong> '
+            '<div class="task-label">ordered task</div>',
             html,
         )
         self.assertIn(
             '<strong class="ordered-marker">2.</strong> '
-            '<strong class="task-marker">☑</strong> ordered done',
+            '<strong class="task-marker task-marker-checked">✓</strong> '
+            '<div class="task-label task-label-checked">ordered done</div>',
             html,
         )
+        self.assertIn("text-decoration: line-through", html)
+        self.assertIn(
+            "strong.task-marker {\n"
+            "    display: inline-block;\n"
+            "    width: 1rem;\n"
+            "    height: 1rem;",
+            html,
+        )
+        self.assertIn("    padding: 0;\n", html)
+        self.assertIn("    text-align: center;\n", html)
+        self.assertIn("div.task-list div.task-list {", html)
+        self.assertNotIn("☐", html)
+        self.assertNotIn("☑", html)
         self.assertNotIn("<input", html)
+
+    def test_renders_markdown_tables_as_selectable_minihtml_divs(self):
+        source = """| Component | State | Notes |
+| :--- | :---: | ---: |
+| HtmlSheet | **Ready** | `native` |
+"""
+
+        html = render_markdown(source)
+
+        self.assertIn('<div class="markdown-table">', html)
+        self.assertIn('<div class="table-head">', html)
+        self.assertIn('<div class="table-body">', html)
+        self.assertIn('<div class="table-row">', html)
+        self.assertIn(
+            '<div class="table-cell table-cell-head table-align-left">'
+            "<strong>Component</strong></div>"
+            '<div class="table-cell table-cell-head table-align-center">'
+            "<strong>State</strong></div>"
+            '<div class="table-cell table-cell-head table-align-right" '
+            'style="padding-left:1.3rem">'
+            "<strong>Notes</strong></div>",
+            html,
+        )
+        self.assertIn(
+            '<div class="table-cell table-align-left">HtmlSheet</div>'
+            '<div class="table-cell table-align-center"><strong>Ready</strong></div>'
+            '<div class="table-cell table-align-right"><code>native</code></div>',
+            html,
+        )
+        self.assertIn("div.table-cell {\n    display: inline;", html)
+        self.assertIn(
+            "div.markdown-table code {\n"
+            "    padding-right: 0;\n"
+            "    padding-left: 0;",
+            html,
+        )
+        self.assertNotIn("&nbsp;", html)
+        self.assertNotIn("table-cell-label", html)
+        self.assertNotIn("table-cell-value", html)
+        self.assertNotIn("<table", html)
+
+    def test_table_parser_handles_escaped_pipes_and_rejects_mismatched_columns(self):
+        escaped_pipe = """Name | Expression
+--- | ---
+Parser | a \\| b
+"""
+        invalid_table = """| A | B |
+| --- |
+| one | two |
+"""
+
+        escaped_html = render_markdown(escaped_pipe)
+        invalid_html = render_markdown(invalid_table)
+
+        self.assertIn('<div class="markdown-table">', escaped_html)
+        self.assertIn("a | b", escaped_html)
+        self.assertNotIn('<div class="markdown-table">', invalid_html)
+        self.assertIn("| A | B |", invalid_html)
+
+    def test_table_column_padding_uses_cjk_typographic_width(self):
+        source = """| 组件 | 状态 |
+| :--- | ---: |
+| HtmlSheet | Ready |
+"""
+
+        html = render_markdown(source)
+
+        self.assertIn(
+            '<div class="table-cell table-cell-head table-align-left" '
+            'style="padding-right:4.1rem"><strong>组件</strong></div>',
+            html,
+        )
+        self.assertIn(
+            '<div class="table-cell table-cell-head table-align-right" '
+            'style="padding-left:1.7rem"><strong>状态</strong></div>',
+            html,
+        )
 
     def test_renders_existing_local_image_as_encoded_file_url(self):
         with TemporaryDirectory() as directory:

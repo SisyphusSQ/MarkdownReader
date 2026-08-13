@@ -6,6 +6,21 @@ The project uses semantic versioning for installable releases.
 
 ## Unreleased
 
+### Added
+
+- Pipe-delimited Markdown tables, rendered as selectable minihtml divs in native
+  previews and semantic HTML tables in browser previews.
+
+### Changed
+
+- Refined native preview typography, spacing, headings, quotations, inline code,
+  code blocks, tables, Mermaid, and MathJax with a GitHub-inspired visual hierarchy
+  that continues to follow the active Sublime color scheme.
+- Restyled task lists with compact theme-aware checkboxes, muted completed labels,
+  strike-through states, and nested-task guide lines in native and browser previews.
+- Removed the duplicate visible Mermaid source below rendered diagrams while
+  retaining the hidden definition required by the browser runtime.
+
 ## 0.1.0 - 2026-08-13
 
 ### Added

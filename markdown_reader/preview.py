@@ -78,7 +78,10 @@ class PreviewManager:
         if not source_name:
             file_name = source_view.file_name()
             source_name = os.path.basename(file_name) if file_name else "Untitled"
-        return "{} — Preview".format(source_name), self._render(source)
+        return "{} — Preview".format(source_name), self._render(
+            source,
+            source_path=source_view.file_name(),
+        )
 
     @staticmethod
     def _is_sheet_in_window(sheet, window):

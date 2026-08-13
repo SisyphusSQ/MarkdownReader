@@ -9,7 +9,8 @@ need a separate Python package installation.
 - Source: `mistune-3.3.0-py3-none-any.whl` from PyPI
 - Wheel SHA-256: `a758e578acda49d8195f9a860b132dae2cf7bf409381393b1c4e6e489a65397b`
 - License: BSD-3-Clause; see `mistune/LICENSE`
-- Bundled subset: core block/inline/list parser, HTML renderer, and plugin loader
+- Bundled subset: core block/inline/list parser, HTML renderer, plugin loader,
+  and the task-list plugin
 
 The upstream `typing_extensions.Self` import is replaced with an equivalent
 local `TypeVar` because it is used only in an internal callable annotation.

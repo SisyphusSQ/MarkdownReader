@@ -21,8 +21,11 @@ embedded images.
   preview or stealing editor focus.
 - Reuse the same preview tab when the command is run again.
 - Render headings, paragraphs, emphasis, quotations, lists, and fenced code.
-- Keep links inert and escape raw HTML until the dedicated security and link
-  handling slices are complete.
+- Open absolute HTTP(S) links through Sublime's native minihtml protocol support.
+- Render task lists with static checkbox markers.
+- Render existing local PNG, JPG, and GIF files relative to a saved Markdown
+  file. Remote, missing, and unsupported images remain explicit placeholders.
+- Keep other link protocols inert and escape raw HTML.
 
 ## Goals
 

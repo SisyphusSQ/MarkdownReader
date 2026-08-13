@@ -98,8 +98,8 @@ class PreviewManagerTests(unittest.TestCase):
     def setUp(self):
         self.rendered_sources = []
 
-        def render(source):
-            self.rendered_sources.append(source)
+        def render(source, source_path=None):
+            self.rendered_sources.append((source, source_path))
             return "<p>{}</p>".format(source)
 
         self.manager = PreviewManager(render)
@@ -109,7 +109,7 @@ class PreviewManagerTests(unittest.TestCase):
     def test_creates_html_sheet_from_current_unsaved_buffer(self):
         sheet = self.manager.open_preview(self.window, self.view, make_region)
 
-        self.assertEqual(["first unsaved revision"], self.rendered_sources)
+        self.assertEqual([("first unsaved revision", None)], self.rendered_sources)
         self.assertEqual([(0, len(self.view.text))], self.view.requested_regions)
         self.assertEqual("notes.md — Preview", sheet.name)
         self.assertEqual("<p>first unsaved revision</p>", sheet.contents)
@@ -135,7 +135,7 @@ class PreviewManagerTests(unittest.TestCase):
         self.assertIsNot(closed_sheet, replacement)
         self.assertEqual(2, len(self.window.created_sheets))
         self.assertEqual(
-            ["first unsaved revision", "first unsaved revision"],
+            [("first unsaved revision", None), ("first unsaved revision", None)],
             self.rendered_sources,
         )
 
@@ -204,6 +204,7 @@ class PreviewManagerTests(unittest.TestCase):
         sheet = self.manager.open_preview(self.window, view, make_region)
 
         self.assertEqual("guide.md — Preview", sheet.name)
+        self.assertEqual([("saved", "/project/docs/guide.md")], self.rendered_sources)
 
 
 class SideBySideGroupTests(unittest.TestCase):

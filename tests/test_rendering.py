@@ -1,4 +1,6 @@
 import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
 from markdown_reader.rendering import render_markdown
 
@@ -66,12 +68,91 @@ if value < 10:
         self.assertIn("white-space: pre-wrap", html)
         self.assertNotIn("<pre>", html)
 
-    def test_keeps_links_inert_until_link_support_is_enabled(self):
-        html = render_markdown("Read [the guide](https://example.com).")
+    def test_activates_http_and_https_links(self):
+        html = render_markdown(
+            "Read [HTTP](http://example.com/a?b=1&c=2) and "
+            '[HTTPS](https://example.com/guide "Guide").'
+        )
 
-        self.assertIn("Read the guide.", html)
+        self.assertIn('<a href="http://example.com/a?b=1&amp;c=2">HTTP</a>', html)
+        self.assertIn(
+            '<a href="https://example.com/guide" title="Guide">HTTPS</a>',
+            html,
+        )
+
+    def test_keeps_non_http_links_inert(self):
+        html = render_markdown(
+            "Read [local](guide.md), [mail](mailto:reader@example.com), and "
+            "[command](subl:save)."
+        )
+
+        self.assertIn("Read local, mail, and command.", html)
         self.assertNotIn("<a ", html)
+        self.assertNotIn("subl:save", html)
+
+    def test_renders_task_lists_with_static_markers(self):
+        html = render_markdown(
+            "- [ ] draft\n- [x] shipped\n- [X] verified\n- regular item\n\n"
+            "1. [ ] ordered task\n2. [x] ordered done\n"
+        )
+
+        self.assertIn('<div class="task-list">', html)
+        self.assertIn('<strong class="task-marker">☐</strong> draft', html)
+        self.assertIn('<strong class="task-marker">☑</strong> shipped', html)
+        self.assertIn('<strong class="task-marker">☑</strong> verified', html)
+        self.assertIn('<strong class="task-marker">•</strong> regular item', html)
+        self.assertIn(
+            '<strong class="ordered-marker">1.</strong> '
+            '<strong class="task-marker">☐</strong> ordered task',
+            html,
+        )
+        self.assertIn(
+            '<strong class="ordered-marker">2.</strong> '
+            '<strong class="task-marker">☑</strong> ordered done',
+            html,
+        )
+        self.assertNotIn("<input", html)
+
+    def test_renders_existing_local_image_as_encoded_file_url(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            source_path = root / "notes.md"
+            image_path = root / "assets" / "diagram one.PNG"
+            image_path.parent.mkdir()
+            image_path.touch()
+
+            html = render_markdown(
+                '![System diagram](assets/diagram%20one.PNG "Overview")',
+                source_path=str(source_path),
+            )
+
+        self.assertIn('<img class="local-image"', html)
+        self.assertIn(image_path.resolve().as_uri(), html)
+        self.assertIn('alt="System diagram"', html)
+        self.assertIn('title="Overview"', html)
+
+    def test_blocks_remote_missing_and_unsupported_images(self):
+        with TemporaryDirectory() as directory:
+            source_path = str(Path(directory) / "notes.md")
+
+            html = render_markdown(
+                "![remote](https://example.com/image.png)\n\n"
+                "![missing](missing.png)\n\n"
+                "![vector](diagram.svg)",
+                source_path=source_path,
+            )
+
+        self.assertNotIn("<img", html)
         self.assertNotIn("https://example.com", html)
+        self.assertIn("remote images are blocked", html)
+        self.assertIn("local image not found", html)
+        self.assertIn("unsupported image format", html)
+
+    def test_relative_image_in_unsaved_buffer_has_placeholder(self):
+        html = render_markdown("![draft](diagram.png)")
+
+        self.assertNotIn("<img", html)
+        self.assertIn("save the Markdown file to resolve this image", html)
 
     def test_escapes_raw_html(self):
         html = render_markdown('<script>alert("unsafe")</script>')

@@ -13,6 +13,9 @@ embedded images.
 ## Available now
 
 - Open the active Markdown buffer through **MarkdownReader: Open Preview**.
+- Open or move the preview to an adjacent group through
+  **MarkdownReader: Open Preview Side by Side**. A single-group window becomes
+  two equal columns; existing multi-group layouts are preserved.
 - Preview unsaved edits in a native, theme-aware Sublime `HtmlSheet`.
 - Reuse the same preview tab when the command is run again.
 - Render headings, paragraphs, emphasis, quotations, lists, and fenced code.

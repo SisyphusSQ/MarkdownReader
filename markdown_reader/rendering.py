@@ -1,5 +1,6 @@
 """Convert Markdown into a self-contained minihtml document."""
 
+from .mermaid import mermaid_block_key
 from .security import DEFAULT_SECURITY_POLICY
 from .vendor.mistune import create_markdown
 from .vendor.mistune.plugins.task_lists import task_lists
@@ -10,10 +11,16 @@ from .vendor.mistune.util import escape, escape_url, striptags
 class MinihtmlRenderer(HTMLRenderer):
     """Render only the inert Markdown subset supported by the first release slice."""
 
-    def __init__(self, source_path=None, policy=DEFAULT_SECURITY_POLICY):
+    def __init__(
+        self,
+        source_path=None,
+        policy=DEFAULT_SECURITY_POLICY,
+        special_results=None,
+    ):
         super().__init__(escape=True)
         self._source_path = source_path
         self._policy = policy
+        self._special_results = special_results or {}
 
     def render_token(self, token, state):
         """Render ordered lists with explicit markers minihtml can display."""
@@ -110,16 +117,45 @@ class MinihtmlRenderer(HTMLRenderer):
     def block_code(self, code, info=None):
         """Preserve code whitespace using minihtml-supported CSS."""
         language_class = ""
+        language = ""
         if info:
             language = info.strip().split(None, 1)[0]
             if language:
                 language_class = ' class="language-{}"'.format(escape(language))
+        if language.lower() == "mermaid":
+            return self._render_mermaid(code, language_class)
         return (
             '<div class="code-block"><code{}>{}</code></div>\n'.format(
                 language_class,
                 escape(code),
             )
         )
+
+    def _render_mermaid(self, code, language_class):
+        result = self._special_results.get(mermaid_block_key(code))
+        if result is None:
+            rendered = '<div class="mermaid-status">Rendering Mermaid diagram…</div>'
+        elif result.error:
+            rendered = '<div class="mermaid-error">Mermaid: {}</div>'.format(
+                escape(result.error)
+            )
+        else:
+            dimensions = ""
+            if result.width > 0 and result.height > 0:
+                dimensions = ' width="{}" height="{}"'.format(
+                    result.width,
+                    result.height,
+                )
+            rendered = (
+                '<div class="mermaid-image-container">'
+                '<img class="mermaid-image" src="data:image/png;base64,{}" '
+                'alt="Rendered Mermaid diagram"{} /></div>'
+            ).format(result.data, dimensions)
+        source = '<div class="mermaid-source"><code{}>{}</code></div>'.format(
+            language_class,
+            escape(code),
+        )
+        return '<div class="mermaid-block">{}{}</div>\n'.format(rendered, source)
 
 
 _DOCUMENT_PREFIX = """<html>
@@ -135,7 +171,8 @@ h1, h2, h3, h4, h5, h6 {
     margin-top: 1.4rem;
     margin-bottom: 0.6rem;
 }
-p, ul, div.ordered-list, div.task-list, div.blockquote, div.code-block, img.local-image {
+p, ul, div.ordered-list, div.task-list, div.blockquote, div.code-block,
+div.mermaid-block, img.local-image {
     margin-top: 0.6rem;
     margin-bottom: 0.6rem;
 }
@@ -169,6 +206,27 @@ div.code-block code {
     font-family: monospace;
     white-space: pre-wrap;
 }
+div.mermaid-block {
+    padding: 0.8rem;
+    border-radius: 0.3rem;
+    background-color: color(var(--foreground) alpha(0.04));
+}
+div.mermaid-image-container {
+    text-align: center;
+}
+div.mermaid-status, div.mermaid-error {
+    margin-bottom: 0.6rem;
+    color: var(--accent);
+}
+div.mermaid-error {
+    color: var(--redish);
+}
+div.mermaid-source code {
+    display: block;
+    font-family: monospace;
+    white-space: pre-wrap;
+    opacity: 0.72;
+}
 </style>
 </head>
 <body id="markdown-reader-preview">
@@ -177,13 +235,22 @@ div.code-block code {
 _DOCUMENT_SUFFIX = "</body>\n</html>\n"
 
 
-def render_markdown(source, source_path=None, policy=DEFAULT_SECURITY_POLICY):
+def render_markdown(
+    source,
+    source_path=None,
+    policy=DEFAULT_SECURITY_POLICY,
+    special_results=None,
+):
     """Return theme-aware minihtml for a Markdown source string."""
     rejection_reason = policy.source_rejection_reason(source)
     if rejection_reason:
         diagnostic = '<div class="security-error">{}</div>\n'.format(escape(rejection_reason))
         return _DOCUMENT_PREFIX + diagnostic + _DOCUMENT_SUFFIX
 
-    renderer = MinihtmlRenderer(source_path=source_path, policy=policy)
+    renderer = MinihtmlRenderer(
+        source_path=source_path,
+        policy=policy,
+        special_results=special_results,
+    )
     markdown = create_markdown(renderer=renderer, plugins=[task_lists])
     return _DOCUMENT_PREFIX + markdown(source) + _DOCUMENT_SUFFIX

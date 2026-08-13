@@ -25,6 +25,8 @@ MarkdownReader 是 Sublime Text 4 的原生 Markdown 阅读与实时预览插件
 - 其他链接协议保持不可点击，原始 HTML 会被转义。
 - 通过 **MarkdownReader: Check Renderer Environment** 检查 Node.js、Chrome
   和本地 renderer 协议。
+- 将 `mermaid` 围栏代码块离线渲染为透明、适配主题的 PNG，同时在图片下方
+  保留原始图表源码。
 
 ## 默认安全策略
 
@@ -80,9 +82,11 @@ uv pip install --python .venv/bin/python -r requirements-dev.txt
 .venv/bin/python -m unittest discover -s tests -v
 ```
 
-特殊块 renderer 是懒启动、可复用的 Node.js 子进程，通过 stdin/stdout 传输
-newline-delimited JSON，不监听任何端口。随包资源首次使用时写入 Sublime cache；
-Mermaid 和 MathJax 渲染分别在其后续独立切片中加入。
+特殊块 renderer 需要 Node.js 22.12 或更新版本以及 Chrome 或 Chromium。
+它是懒启动、可复用的 Node.js 子进程，通过 stdin/stdout 传输
+newline-delimited JSON，不监听任何端口。随包资源首次使用时写入 Sublime
+cache；固定版本的 Mermaid 与 `puppeteer-core` 已提交为单文件 bundle，终端
+用户无需执行 `npm install`。MathJax 在其独立开发切片中加入。
 
 ## 发布
 

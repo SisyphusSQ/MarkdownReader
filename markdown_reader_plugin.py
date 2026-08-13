@@ -8,6 +8,11 @@ import tempfile
 import sublime
 import sublime_plugin
 
+from .markdown_reader.mermaid import (
+    MermaidController,
+    MermaidRenderOptions,
+    mermaid_theme_for_background,
+)
 from .markdown_reader.preview import PreviewManager, choose_side_by_side_group
 from .markdown_reader.refresh import DebouncedRefreshScheduler, LivePreviewController
 from .markdown_reader.renderer_environment import RendererEnvironmentDetector
@@ -64,7 +69,41 @@ def _create_renderer(environment):
             env=process_environment,
         )
 
-    return RendererProcess(start_process)
+    return RendererProcess(start_process, timeout_seconds=30)
+
+
+def _get_renderer_process():
+    global RENDERER_PROCESS
+    if RENDERER_PROCESS is not None:
+        return RENDERER_PROCESS
+
+    environment = RendererEnvironmentDetector().detect()
+    if not environment.ready:
+        raise RuntimeError("; ".join(environment.problems))
+    RENDERER_PROCESS = _create_renderer(environment)
+    return RENDERER_PROCESS
+
+
+def _mermaid_render_options(source_view):
+    style = source_view.style_for_scope("text") or {}
+    viewport_width, _ = source_view.viewport_extent()
+    target_width = max(320, min(1600, int(viewport_width) - 64))
+    return MermaidRenderOptions(
+        theme=mermaid_theme_for_background(style.get("background", "")),
+        width=target_width,
+        scale=2,
+    )
+
+
+MERMAID_CONTROLLER = MermaidController(
+    preview_manager=PREVIEW_MANAGER,
+    renderer_provider=_get_renderer_process,
+    schedule_async=sublime.set_timeout_async,
+    schedule_main=sublime.set_timeout,
+    region_factory=sublime.Region,
+    options_provider=_mermaid_render_options,
+)
+PREVIEW_MANAGER.set_after_render(MERMAID_CONTROLLER.preview_updated)
 
 
 def plugin_unloaded():
@@ -145,6 +184,12 @@ class MarkdownReaderCheckRendererEnvironmentCommand(sublime_plugin.WindowCommand
 
         message = (
             "MarkdownReader renderer is ready.\n\n"
-            "Node: {}\nChrome: {}\nProtocol: {}"
-        ).format(result["nodeVersion"], environment.chrome_path, result["protocolVersion"])
+            "Node: {}\nChrome: {}\nProtocol: {}\nMermaid: {}\nPuppeteer: {}"
+        ).format(
+            result["nodeVersion"],
+            environment.chrome_path,
+            result["protocolVersion"],
+            result["mermaidVersion"],
+            result["puppeteerVersion"],
+        )
         sublime.set_timeout(lambda: sublime.message_dialog(message))

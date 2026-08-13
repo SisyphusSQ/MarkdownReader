@@ -27,10 +27,20 @@ class PreviewManager:
     def __init__(self, render):
         self._render = render
         self._sheets = {}
+        self._special_results = {}
+        self._after_render = None
+
+    def set_after_render(self, callback):
+        """Register a callback used to schedule special-block rendering."""
+        self._after_render = callback
 
     def open_preview(self, window, source_view, region_factory, group=-1):
         """Render the source's current buffer and focus its preview sheet."""
-        title, contents = self._render_preview(source_view, region_factory)
+        source, title, contents = self._render_preview(
+            window,
+            source_view,
+            region_factory,
+        )
         key = (window.id(), source_view.id())
         sheet = self._sheets.get(key)
         target_group = window.active_group() if group == -1 else group
@@ -38,14 +48,14 @@ class PreviewManager:
         if sheet is None or not self._is_sheet_in_window(sheet, window):
             sheet = window.new_html_sheet(title, contents, group=target_group)
             self._sheets[key] = sheet
-            return sheet
-
-        sheet.set_name(title)
-        sheet.set_contents(contents)
-        current_group, _ = window.get_sheet_index(sheet)
-        if current_group != target_group:
-            window.set_sheet_index(sheet, target_group, -1)
-        window.focus_sheet(sheet)
+        else:
+            sheet.set_name(title)
+            sheet.set_contents(contents)
+            current_group, _ = window.get_sheet_index(sheet)
+            if current_group != target_group:
+                window.set_sheet_index(sheet, target_group, -1)
+            window.focus_sheet(sheet)
+        self._notify_after_render(window, source_view, source)
         return sheet
 
     def has_preview(self, window, source_view):
@@ -56,6 +66,7 @@ class PreviewManager:
             return False
         if not self._is_sheet_in_window(sheet, window):
             self._sheets.pop(key, None)
+            self._special_results.pop(key, None)
             return False
         return True
 
@@ -65,23 +76,59 @@ class PreviewManager:
         sheet = self._sheets.get(key)
         if sheet is None or not self._is_sheet_in_window(sheet, window):
             self._sheets.pop(key, None)
+            self._special_results.pop(key, None)
             return None
 
-        title, contents = self._render_preview(source_view, region_factory)
+        source, title, contents = self._render_preview(
+            window,
+            source_view,
+            region_factory,
+        )
+        sheet.set_name(title)
+        sheet.set_contents(contents)
+        self._notify_after_render(window, source_view, source)
+        return sheet
+
+    def apply_special_results(self, window, source_view, region_factory, results):
+        """Apply completed special blocks without scheduling another render pass."""
+        key = (window.id(), source_view.id())
+        if not self.has_preview(window, source_view):
+            return None
+        self._special_results.setdefault(key, {}).update(results)
+        return self._refresh_without_notification(
+            window,
+            source_view,
+            region_factory,
+        )
+
+    def _refresh_without_notification(self, window, source_view, region_factory):
+        key = (window.id(), source_view.id())
+        sheet = self._sheets[key]
+        _, title, contents = self._render_preview(window, source_view, region_factory)
         sheet.set_name(title)
         sheet.set_contents(contents)
         return sheet
 
-    def _render_preview(self, source_view, region_factory):
+    def _render_preview(self, window, source_view, region_factory):
         source = source_view.substr(region_factory(0, source_view.size()))
         source_name = source_view.name()
         if not source_name:
             file_name = source_view.file_name()
             source_name = os.path.basename(file_name) if file_name else "Untitled"
-        return "{} — Preview".format(source_name), self._render(
+        key = (window.id(), source_view.id())
+        return (
             source,
-            source_path=source_view.file_name(),
+            "{} — Preview".format(source_name),
+            self._render(
+                source,
+                source_path=source_view.file_name(),
+                special_results=self._special_results.get(key),
+            ),
         )
+
+    def _notify_after_render(self, window, source_view, source):
+        if self._after_render is not None:
+            self._after_render(window, source_view, source)
 
     @staticmethod
     def _is_sheet_in_window(sheet, window):

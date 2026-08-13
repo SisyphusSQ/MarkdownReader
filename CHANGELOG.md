@@ -19,5 +19,7 @@ The project intends to use semantic versioning once it has an installable releas
 - HTTP(S) links, static task-list markers, and resolved local PNG/JPG/GIF images.
 - Central untrusted-input policy with source, protocol, local-path, and image-size limits.
 - Lazy reusable NDJSON renderer process with Node/Chrome diagnostics and lifecycle cleanup.
+- Offline static Mermaid rendering with pinned local assets, transparent PNG output,
+  per-block errors, theme/viewport sizing, network blocking, and isolated Chrome profiles.
 - Vendored Mistune 3.3.0 runtime subset with Python 3.8 compatibility adjustments.
 - Unit tests, a manual preview fixture, a project-local uv workflow, and CI checks.

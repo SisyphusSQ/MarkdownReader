@@ -1,0 +1,19 @@
+{
+  "name": "markdown-reader-renderer",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Offline special-block renderer bundled with MarkdownReader",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs"
+  },
+  "dependencies": {
+    "mermaid": "11.16.1",
+    "puppeteer-core": "25.6.0"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2"
+  }
+}

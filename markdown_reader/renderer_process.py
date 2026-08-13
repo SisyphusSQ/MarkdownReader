@@ -13,10 +13,17 @@ class RendererProtocolError(RuntimeError):
 class RendererProcess:
     """Lazily start and serialize requests through one renderer process."""
 
-    def __init__(self, start_process, timeout_seconds=5, max_message_bytes=2 * 1024 * 1024):
+    def __init__(
+        self,
+        start_process,
+        timeout_seconds=5,
+        max_message_bytes=2 * 1024 * 1024,
+        max_response_bytes=8 * 1024 * 1024,
+    ):
         self._start_process = start_process
         self._timeout_seconds = timeout_seconds
         self._max_message_bytes = max_message_bytes
+        self._max_response_bytes = max_response_bytes
         self._process = None
         self._request_id = 0
         self._lock = threading.Lock()
@@ -38,9 +45,15 @@ class RendererProcess:
             try:
                 process.stdin.write(encoded.decode("utf-8"))
                 process.stdin.flush()
-                line = self._reader.submit(process.stdout.readline).result(
-                    timeout=self._timeout_seconds
-                )
+                line = self._reader.submit(
+                    process.stdout.readline,
+                    self._max_response_bytes + 1,
+                ).result(timeout=self._timeout_seconds)
+                if len(line.encode("utf-8")) > self._max_response_bytes:
+                    self._discard_process()
+                    raise RendererProtocolError(
+                        "renderer response exceeds the message-size limit"
+                    )
                 response = json.loads(line)
             except TimeoutError as error:
                 self._discard_process()

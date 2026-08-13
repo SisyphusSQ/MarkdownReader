@@ -2,6 +2,7 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+from markdown_reader.mermaid import MermaidRenderResult, mermaid_block_key
 from markdown_reader.rendering import render_markdown
 from markdown_reader.security import SecurityPolicy
 
@@ -68,6 +69,51 @@ if value < 10:
         self.assertIn('print(&quot;ok&quot;)', html)
         self.assertIn("white-space: pre-wrap", html)
         self.assertNotIn("<pre>", html)
+
+    def test_mermaid_block_starts_as_placeholder_and_preserves_source(self):
+        source = "```mermaid\nflowchart LR\nA --> B\n```\n"
+
+        html = render_markdown(source)
+
+        self.assertIn('class="mermaid-status"', html)
+        self.assertIn("Rendering Mermaid diagram", html)
+        self.assertIn("flowchart LR\nA --&gt; B", html)
+        self.assertIn('class="language-mermaid"', html)
+
+    def test_mermaid_block_embeds_validated_png_result(self):
+        diagram = "flowchart LR\nA --> B\n"
+        result = MermaidRenderResult.success(
+            "iVBORw0KGgoAAAANSUhEUg==",
+            width=320,
+            height=120,
+        )
+
+        html = render_markdown(
+            "```mermaid\n{}```\n".format(diagram),
+            special_results={mermaid_block_key(diagram): result},
+        )
+
+        self.assertIn(
+            'src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUg=="',
+            html,
+        )
+        self.assertIn('width="320" height="120"', html)
+        self.assertNotIn("Rendering Mermaid diagram", html)
+        self.assertIn("flowchart LR", html)
+
+    def test_mermaid_error_is_escaped_and_keeps_the_document_readable(self):
+        diagram = "not a diagram\n"
+        result = MermaidRenderResult.failure("Parse <error>")
+
+        html = render_markdown(
+            "Before\n\n```mermaid\n{}```\n\nAfter".format(diagram),
+            special_results={mermaid_block_key(diagram): result},
+        )
+
+        self.assertIn("<p>Before</p>", html)
+        self.assertIn("<p>After</p>", html)
+        self.assertIn("Parse &lt;error&gt;", html)
+        self.assertNotIn("Parse <error>", html)
 
     def test_activates_http_and_https_links(self):
         html = render_markdown(

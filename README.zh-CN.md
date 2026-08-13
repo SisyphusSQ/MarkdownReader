@@ -32,6 +32,9 @@ MarkdownReader 是 Sublime Text 4 的原生 Markdown 阅读与实时预览插件
   **Copy TeX** 操作。
 - 仅重新渲染发生变化的 Mermaid 与 MathJax 源码。完成结果进入共享的内存 LRU
   cache，上限为 128 项和估算 64 MiB；cache key 包含 renderer/版本及全部视觉参数。
+- 通过 **MarkdownReader: Open Full Preview in Browser** 打开离线完整页面快照。
+  Mermaid 以经过净化的 SVG 展示并提供缩放控件，MathJax 输出 SVG；页面提供
+  **Print / Save as PDF**，可由浏览器打印或导出 PDF。
 
 如需启用 `$...$` 行内公式，请打开 **Preferences: Package Settings →
 MarkdownReader → Settings**，将 `"math_single_dollar"` 设为 `true`；默认值保持
@@ -43,6 +46,13 @@ Markdown 一律视为不可信输入。原始 HTML 会被转义，`subl:` 等非
 不可点击，远程图片不会加载。本地图片必须是已保存 Markdown 所在目录树内的普通
 PNG、JPG 或 GIF 文件，且不超过 20 MiB；超过 2 MiB 的 Markdown 源文件不会进入
 解析器，而会显示诊断信息。以上上限均按字节计算。
+
+浏览器完整预览不会把 Markdown 项目目录授权给浏览器。通过策略检查的本地图片会
+转换为 data URI，原始 HTML 仍被转义，Mermaid 使用 strict 模式并移除活动链接；
+Content Security Policy 会阻断网络、文件、frame、form、media 与 object 资源。
+单个浏览器页面的所有内嵌本地图片另有 40 MiB 总预算。自包含 HTML 只写入操作系统
+私有临时目录，不写入 Markdown 项目，并在插件卸载时清理。该页面是当前缓冲区的
+一次性快照；编辑后需要重新执行命令。
 
 ## 目标
 
@@ -96,7 +106,8 @@ uv pip install --python .venv/bin/python -r requirements-dev.txt
 newline-delimited JSON，不监听任何端口。随包资源首次使用时写入 Sublime
 cache；固定版本的 Mermaid、MathJax 与 `puppeteer-core` 已提交为单文件 bundle，
 终端用户无需执行 `npm install`。图表与公式图片只缓存在内存中，插件卸载时清空，
-不会写入磁盘。
+不会写入磁盘。独立的 browser-preview bundle 也随插件分发，在现代默认浏览器内
+运行，不请求 CDN。
 
 ## 发布
 

@@ -5,10 +5,12 @@ import os
 import subprocess
 import tempfile
 import threading
+import webbrowser
 
 import sublime
 import sublime_plugin
 
+from .markdown_reader.browser_preview import BrowserPreviewFiles, BrowserPreviewService
 from .markdown_reader.mathjax import MathJaxController, MathRenderOptions
 from .markdown_reader.mermaid import (
     MermaidController,
@@ -45,6 +47,24 @@ LIVE_PREVIEW_CONTROLLER = LivePreviewController(
 RENDERER_PROCESS = None
 RENDERER_PROCESS_LOCK = threading.Lock()
 RENDER_CACHE = BoundedMemoryCache()
+BROWSER_PREVIEW_FILES = BrowserPreviewFiles()
+
+
+def _load_browser_preview_runtime():
+    return sublime.load_resource(
+        "Packages/MarkdownReader/renderer/browser-preview.js"
+    )
+
+
+def _open_system_browser(uri):
+    return webbrowser.open(uri, new=2)
+
+
+BROWSER_PREVIEW_SERVICE = BrowserPreviewService(
+    runtime_loader=_load_browser_preview_runtime,
+    files=BROWSER_PREVIEW_FILES,
+    opener=_open_system_browser,
+)
 
 
 def _materialize_renderer_resource():
@@ -165,6 +185,7 @@ PREVIEW_MANAGER.set_after_render(_render_special_blocks)
 
 def plugin_unloaded():
     global RENDERER_PROCESS
+    BROWSER_PREVIEW_SERVICE.close()
     RENDER_CACHE.clear()
     with RENDERER_PROCESS_LOCK:
         if RENDERER_PROCESS is not None:
@@ -204,6 +225,60 @@ class MarkdownReaderOpenPreviewSideBySideCommand(sublime_plugin.WindowCommand):
 
     def run(self):
         _open_preview(self.window, side_by_side=True)
+
+
+class MarkdownReaderOpenFullPreviewInBrowserCommand(sublime_plugin.WindowCommand):
+    """Open an offline full-page preview in the system browser."""
+
+    def is_enabled(self):
+        return self.window.active_view() is not None
+
+    def run(self):
+        source_view = self.window.active_view()
+        if source_view is None:
+            sublime.status_message("MarkdownReader: No active document to preview")
+            return
+
+        source = source_view.substr(sublime.Region(0, source_view.size()))
+        source_path = source_view.file_name()
+        title = source_view.name()
+        if not title:
+            title = os.path.basename(source_path) if source_path else "Untitled"
+        style = source_view.style_for_scope("text") or {}
+        theme = (
+            "dark"
+            if mermaid_theme_for_background(style.get("background", "")) == "dark"
+            else "light"
+        )
+        window_id = self.window.id()
+        view_id = source_view.id()
+        allow_single_dollar_math = _single_dollar_math_enabled()
+
+        def open_browser_preview():
+            try:
+                BROWSER_PREVIEW_SERVICE.open(
+                    window_id=window_id,
+                    view_id=view_id,
+                    source=source,
+                    source_path=source_path,
+                    title=title,
+                    theme=theme,
+                    allow_single_dollar_math=allow_single_dollar_math,
+                )
+            except Exception as error:
+                LOGGER.exception("Unable to open browser Markdown preview")
+                message = "MarkdownReader could not open the browser preview: {}".format(
+                    error
+                )
+                sublime.set_timeout(lambda: sublime.error_message(message))
+                return
+            sublime.set_timeout(
+                lambda: sublime.status_message(
+                    "MarkdownReader: Full preview opened in the browser"
+                )
+            )
+
+        sublime.set_timeout_async(open_browser_preview)
 
 
 class MarkdownReaderCopyTexCommand(sublime_plugin.WindowCommand):

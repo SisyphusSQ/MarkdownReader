@@ -8,6 +8,10 @@
         "command": "markdown_reader_open_preview_side_by_side"
     },
     {
+        "caption": "MarkdownReader: Open Full Preview in Browser",
+        "command": "markdown_reader_open_full_preview_in_browser"
+    },
+    {
         "caption": "MarkdownReader: Check Renderer Environment",
         "command": "markdown_reader_check_renderer_environment"
     }

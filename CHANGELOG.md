@@ -27,5 +27,7 @@ The project intends to use semantic versioning once it has an installable releas
 - Incremental Mermaid and MathJax rendering backed by a shared, bounded in-memory
   LRU cache with full renderer-option keys, same-key work coalescing, stale-revision
   rejection, and unload cleanup.
+- Offline full-page browser preview with interactive Mermaid zoom, MathJax SVG,
+  print/PDF export, embedded local images, strict CSP, and session-scoped cleanup.
 - Vendored Mistune 3.3.0 runtime subset with Python 3.8 compatibility adjustments.
 - Unit tests, a manual preview fixture, a project-local uv workflow, and CI checks.

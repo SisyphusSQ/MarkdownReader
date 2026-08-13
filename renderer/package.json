@@ -7,7 +7,8 @@
     "node": ">=22.12.0"
   },
   "scripts": {
-    "build": "node scripts/build.mjs"
+    "build": "node scripts/build.mjs",
+    "verify:browser-preview": "node scripts/verify-browser-preview.mjs"
   },
   "dependencies": {
     "@mathjax/src": "4.1.3",

@@ -65,5 +65,9 @@ jobs:
         run: npm run build
         working-directory: renderer
 
-      - name: Verify reproducible renderer bundle
-        run: git diff --exit-code -- renderer/server.js
+      - name: Verify reproducible renderer bundles
+        run: git diff --exit-code -- renderer/server.js renderer/browser-preview.js
+
+      - name: Verify full browser preview
+        run: npm run verify:browser-preview
+        working-directory: renderer

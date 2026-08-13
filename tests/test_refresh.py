@@ -65,6 +65,19 @@ class DebouncedRefreshSchedulerTests(unittest.TestCase):
 
         self.assertEqual([], refreshed)
 
+    def test_reads_the_current_configured_delay_for_each_schedule(self):
+        configured_delay = [300]
+        debouncer = DebouncedRefreshScheduler(
+            self.scheduler,
+            delay_provider=lambda: configured_delay[0],
+        )
+
+        debouncer.schedule((11, 22), lambda: None)
+        configured_delay[0] = 700
+        debouncer.schedule((33, 44), lambda: None)
+
+        self.assertEqual([300, 700], [call[1] for call in self.scheduler.calls])
+
 
 class FakeWindow:
     def id(self):

@@ -273,6 +273,27 @@ class PreviewManagerTests(unittest.TestCase):
             self.manager._special_results[key],
         )
 
+    def test_refreshes_every_open_preview_and_prunes_closed_associations(self):
+        second_view = FakeView(33, "second.md", "second")
+        first_sheet = self.manager.open_preview(self.window, self.view, make_region)
+        second_sheet = self.manager.open_preview(
+            self.window,
+            second_view,
+            make_region,
+        )
+        self.manager._special_results[(self.window.id(), second_view.id())] = {
+            "mermaid:old": "old"
+        }
+        self.view.text = "theme refresh"
+        second_sheet.owner = None
+
+        refreshed = self.manager.refresh_all(make_region)
+
+        self.assertEqual(1, refreshed)
+        self.assertEqual(["<p>theme refresh</p>"], first_sheet.content_updates)
+        self.assertEqual([], second_sheet.content_updates)
+        self.assertEqual({}, self.manager._special_results)
+
 
 class SideBySideGroupTests(unittest.TestCase):
     def test_single_group_becomes_two_equal_columns(self):

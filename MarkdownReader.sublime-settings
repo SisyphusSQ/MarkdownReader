@@ -1,4 +1,20 @@
 {
+    // Wait this many milliseconds after the last edit before refreshing an
+    // open native preview. Supported range: 50 to 5000.
+    "refresh_delay_ms": 250,
+
+    // Remote image policy for the native preview:
+    // - "blocked" (default): never load remote images.
+    // - "allow_https": load only explicit HTTPS image URLs without credentials.
+    // The offline full browser preview always blocks remote images.
+    "remote_images": "blocked",
+
     // Enable $...$ inline formulas. Disabled by default so currency remains text.
-    "math_single_dollar": false
+    "math_single_dollar": false,
+
+    // Optional absolute Node.js executable. Empty means auto-detect.
+    "node_path": "",
+
+    // Optional absolute Chrome or Chromium executable. Empty means auto-detect.
+    "chrome_path": ""
 }

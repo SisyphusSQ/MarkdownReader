@@ -17,17 +17,18 @@ embedded images.
   **MarkdownReader: Open Preview Side by Side**. A single-group window becomes
   two equal columns; existing multi-group layouts are preserved.
 - Preview unsaved edits in a native, theme-aware Sublime `HtmlSheet`.
-- Refresh an open preview 250ms after the latest source edit without moving the
-  preview or stealing editor focus.
+- Refresh an open preview after a configurable debounce delay (250ms by
+  default) without moving the preview or stealing editor focus.
 - Reuse the same preview tab when the command is run again.
 - Render headings, paragraphs, emphasis, quotations, lists, and fenced code.
 - Open absolute HTTP(S) links through Sublime's native minihtml protocol support.
 - Render task lists with static checkbox markers.
 - Render existing local PNG, JPG, and GIF files relative to a saved Markdown
-  file. Remote, missing, and unsupported images remain explicit placeholders.
+  file. Remote images are blocked by default and can be enabled explicitly for
+  HTTPS only; missing and unsupported images remain explicit placeholders.
 - Keep other link protocols inert and escape raw HTML.
-- Check Node.js, Chrome, and the local renderer protocol through
-  **MarkdownReader: Check Renderer Environment**.
+- Inspect effective settings, Node.js, Chrome, and local renderer versions
+  through **MarkdownReader: Show Diagnostics**.
 - Render fenced `mermaid` blocks offline as transparent, theme-aware PNG images
   while preserving the original diagram source below each image.
 - Render `\(...\)` inline formulas plus `$$...$$` and `\[...\]` display
@@ -41,17 +42,37 @@ embedded images.
   Preview in Browser**. The browser page keeps Mermaid as sanitized SVG with
   zoom controls, renders MathJax as SVG, and provides **Print / Save as PDF**.
 
-To opt in to `$...$` inline formulas, open **Preferences: Package Settings →
-MarkdownReader → Settings** and set `"math_single_dollar": true`. The default
-remains `false`.
+## Settings and diagnostics
+
+Open **Preferences: Package Settings → MarkdownReader → Settings** to configure:
+
+- `refresh_delay_ms`: native-preview debounce delay from 50 to 5000ms; the
+  default is `250`.
+- `remote_images`: `"blocked"` by default, or `"allow_https"` to let the native
+  preview contact explicitly referenced HTTPS image hosts. The offline browser
+  preview always blocks remote images.
+- `math_single_dollar`: opt in to `$...$` inline formulas; the default is
+  `false` so currency remains text.
+- `node_path` and `chrome_path`: optional absolute executable paths. Empty
+  values use auto-detection. A configured path is authoritative, so a missing
+  or non-executable target is reported instead of silently falling back.
+
+Valid setting changes and Sublime theme/preference changes refresh every open
+native preview without restarting the editor. Invalid values fall back to safe
+defaults and appear under **Settings warnings** in **MarkdownReader: Show
+Diagnostics**. The same report shows whether the renderer is ready, which tool
+paths are active, and the protocol, Mermaid, MathJax, and Puppeteer versions.
 
 ## Security defaults
 
-Markdown is treated as untrusted input. Raw HTML is escaped, `subl:` and other
-non-HTTP(S) links are inert, and remote images never load. Local images must be
-regular PNG, JPG, or GIF files inside the saved Markdown file's directory tree
-and no larger than 20 MiB. Markdown sources larger than 2 MiB show a diagnostic
-instead of entering the parser. These limits are measured in bytes.
+Markdown is treated as untrusted input. Raw HTML is escaped, while `subl:` and
+other non-HTTP(S) links are inert. Remote images are blocked by default. The
+native preview's `"allow_https"` opt-in permits requests only to explicit HTTPS
+URLs without embedded credentials; enabling it discloses the reader's IP
+address and request metadata to those image hosts. Local images must be regular
+PNG, JPG, or GIF files inside the saved Markdown file's directory tree and no
+larger than 20 MiB. Markdown sources larger than 2 MiB show a diagnostic instead
+of entering the parser. These limits are measured in bytes.
 
 The full browser preview does not grant the browser access to the Markdown
 project. Approved local images are embedded as data URIs, raw HTML remains

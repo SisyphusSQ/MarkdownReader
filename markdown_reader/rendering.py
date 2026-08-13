@@ -87,12 +87,12 @@ class MinihtmlRenderer(HTMLRenderer):
     def image(self, text, url, title=None):
         """Render supported local images without performing network access."""
         alt = striptags(text) or "untitled"
-        image_path, reason = self._policy.resolve_local_image(url, self._source_path)
+        image_source, reason = self._policy.resolve_image_source(url, self._source_path)
         if reason:
             return self._image_placeholder(alt, reason)
 
         image = '<img class="local-image" src="{}" alt="{}"'.format(
-            escape(image_path.as_uri()),
+            escape(escape_url(image_source)),
             escape(alt),
         )
         if title:

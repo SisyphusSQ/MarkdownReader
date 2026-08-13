@@ -11,6 +11,7 @@ import sublime
 import sublime_plugin
 
 from .markdown_reader.browser_preview import BrowserPreviewFiles, BrowserPreviewService
+from .markdown_reader.diagnostics import format_diagnostics
 from .markdown_reader.mathjax import MathJaxController, MathRenderOptions
 from .markdown_reader.mermaid import (
     MermaidController,
@@ -23,22 +24,38 @@ from .markdown_reader.render_cache import BoundedMemoryCache
 from .markdown_reader.renderer_environment import RendererEnvironmentDetector
 from .markdown_reader.renderer_process import RendererProcess
 from .markdown_reader.rendering import render_markdown
+from .markdown_reader.security import SecurityPolicy
+from .markdown_reader.settings import read_settings
 
 LOGGER = logging.getLogger(__name__)
+PACKAGE_SETTINGS_FILE = "MarkdownReader.sublime-settings"
+PREFERENCES_FILE = "Preferences.sublime-settings"
+PACKAGE_SETTINGS_CHANGE_KEY = "markdown_reader.package_settings"
+PREFERENCES_CHANGE_KEY = "markdown_reader.preferences"
+
+
+def _settings_snapshot():
+    return read_settings(sublime.load_settings(PACKAGE_SETTINGS_FILE))
 
 
 def _single_dollar_math_enabled():
-    settings = sublime.load_settings("MarkdownReader.sublime-settings")
-    return bool(settings.get("math_single_dollar", False))
+    return _settings_snapshot().math_single_dollar
 
 
 def _render_markdown_with_settings(*args, **kwargs):
-    kwargs["allow_single_dollar_math"] = _single_dollar_math_enabled()
+    settings = _settings_snapshot()
+    kwargs["allow_single_dollar_math"] = settings.math_single_dollar
+    kwargs["policy"] = SecurityPolicy(
+        allow_remote_images=settings.remote_images == "allow_https"
+    )
     return render_markdown(*args, **kwargs)
 
 
 PREVIEW_MANAGER = PreviewManager(_render_markdown_with_settings)
-REFRESH_SCHEDULER = DebouncedRefreshScheduler(sublime.set_timeout)
+REFRESH_SCHEDULER = DebouncedRefreshScheduler(
+    sublime.set_timeout,
+    delay_provider=lambda: _settings_snapshot().refresh_delay_ms,
+)
 LIVE_PREVIEW_CONTROLLER = LivePreviewController(
     PREVIEW_MANAGER,
     REFRESH_SCHEDULER,
@@ -109,17 +126,25 @@ def _create_renderer(environment):
     return RendererProcess(start_process, timeout_seconds=30)
 
 
-def _get_renderer_process():
+def _get_renderer_process(environment=None):
     global RENDERER_PROCESS
     with RENDERER_PROCESS_LOCK:
         if RENDERER_PROCESS is not None:
             return RENDERER_PROCESS
 
-        environment = RendererEnvironmentDetector().detect()
+        environment = environment or _detect_renderer_environment()
         if not environment.ready:
             raise RuntimeError("; ".join(environment.problems))
         RENDERER_PROCESS = _create_renderer(environment)
         return RENDERER_PROCESS
+
+
+def _detect_renderer_environment():
+    settings = _settings_snapshot()
+    return RendererEnvironmentDetector(
+        configured_node_path=settings.node_path,
+        configured_chrome_path=settings.chrome_path,
+    ).detect()
 
 
 def _mermaid_render_options(source_view):
@@ -183,14 +208,53 @@ def _render_special_blocks(window, source_view, source):
 PREVIEW_MANAGER.set_after_render(_render_special_blocks)
 
 
-def plugin_unloaded():
-    global RENDERER_PROCESS
-    BROWSER_PREVIEW_SERVICE.close()
+def plugin_loaded():
+    package_settings = sublime.load_settings(PACKAGE_SETTINGS_FILE)
+    preferences = sublime.load_settings(PREFERENCES_FILE)
+    package_settings.clear_on_change(PACKAGE_SETTINGS_CHANGE_KEY)
+    preferences.clear_on_change(PREFERENCES_CHANGE_KEY)
+    package_settings.add_on_change(
+        PACKAGE_SETTINGS_CHANGE_KEY,
+        _on_package_settings_changed,
+    )
+    preferences.add_on_change(
+        PREFERENCES_CHANGE_KEY,
+        _on_preferences_changed,
+    )
+
+
+def _on_package_settings_changed():
     RENDER_CACHE.clear()
+    sublime.set_timeout_async(_close_renderer_process)
+    sublime.set_timeout(_refresh_all_previews)
+
+
+def _on_preferences_changed():
+    sublime.set_timeout(_refresh_all_previews)
+
+
+def _refresh_all_previews():
+    PREVIEW_MANAGER.refresh_all(sublime.Region)
+
+
+def _close_renderer_process():
+    global RENDERER_PROCESS
     with RENDERER_PROCESS_LOCK:
         if RENDERER_PROCESS is not None:
             RENDERER_PROCESS.close()
             RENDERER_PROCESS = None
+
+
+def plugin_unloaded():
+    sublime.load_settings(PACKAGE_SETTINGS_FILE).clear_on_change(
+        PACKAGE_SETTINGS_CHANGE_KEY
+    )
+    sublime.load_settings(PREFERENCES_FILE).clear_on_change(
+        PREFERENCES_CHANGE_KEY
+    )
+    BROWSER_PREVIEW_SERVICE.close()
+    RENDER_CACHE.clear()
+    _close_renderer_process()
 
 
 def _open_preview(window, side_by_side):
@@ -306,36 +370,20 @@ class MarkdownReaderCheckRendererEnvironmentCommand(sublime_plugin.WindowCommand
         sublime.set_timeout_async(self._run_diagnostics)
 
     def _run_diagnostics(self):
-        global RENDERER_PROCESS
-        environment = RendererEnvironmentDetector().detect()
-        if not environment.ready:
-            message = "MarkdownReader renderer is not ready:\n\n- " + "\n- ".join(
-                environment.problems
-            )
-            sublime.set_timeout(lambda: sublime.error_message(message))
-            return
-
-        try:
-            if RENDERER_PROCESS is None:
-                RENDERER_PROCESS = _create_renderer(environment)
-            result = RENDERER_PROCESS.request("ping")
-        except Exception as error:
-            LOGGER.exception("Renderer diagnostics failed")
-            error_message = "MarkdownReader renderer diagnostics failed: {}".format(error)
-            sublime.set_timeout(
-                lambda message=error_message: sublime.error_message(message)
-            )
-            return
-
-        message = (
-            "MarkdownReader renderer is ready.\n\n"
-            "Node: {}\nChrome: {}\nProtocol: {}\nMermaid: {}\nMathJax: {}\nPuppeteer: {}"
-        ).format(
-            result["nodeVersion"],
-            environment.chrome_path,
-            result["protocolVersion"],
-            result["mermaidVersion"],
-            result["mathJaxVersion"],
-            result["puppeteerVersion"],
+        settings = _settings_snapshot()
+        environment = _detect_renderer_environment()
+        result = None
+        renderer_error = ""
+        if environment.ready:
+            try:
+                result = _get_renderer_process(environment).request("ping")
+            except Exception as error:
+                LOGGER.exception("Renderer diagnostics failed")
+                renderer_error = str(error).strip().splitlines()[0][:500]
+        message = format_diagnostics(
+            settings,
+            environment,
+            ping=result,
+            renderer_error=renderer_error,
         )
         sublime.set_timeout(lambda: sublime.message_dialog(message))

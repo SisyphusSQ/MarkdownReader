@@ -127,6 +127,37 @@ class SecurityPolicyTests(unittest.TestCase):
         self.assertIsNone(resolved)
         self.assertEqual("local image path is invalid", reason)
 
+    def test_remote_images_require_explicit_https_opt_in(self):
+        allowed = SecurityPolicy(allow_remote_images=True)
+
+        source, reason = allowed.resolve_image_source(
+            "https://images.example.com/diagram.png",
+            "/tmp/notes.md",
+        )
+
+        self.assertEqual("https://images.example.com/diagram.png", source)
+        self.assertIsNone(reason)
+        for target in (
+            "http://images.example.com/diagram.png",
+            "//images.example.com/diagram.png",
+            "https://user@images.example.com/diagram.png",
+            "https://images.example.com/bad path.png",
+            "https://images.example.com:not-a-port/diagram.png",
+        ):
+            with self.subTest(target=target):
+                source, reason = allowed.resolve_image_source(target, "/tmp/notes.md")
+                self.assertIsNone(source)
+                self.assertEqual("remote images are blocked", reason)
+
+    def test_default_image_source_keeps_remote_images_blocked(self):
+        source, reason = self.policy.resolve_image_source(
+            "https://images.example.com/diagram.png",
+            "/tmp/notes.md",
+        )
+
+        self.assertIsNone(source)
+        self.assertEqual("remote images are blocked", reason)
+
 
 if __name__ == "__main__":
     unittest.main()

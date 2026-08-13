@@ -27,6 +27,7 @@ class PreviewManager:
     def __init__(self, render):
         self._render = render
         self._sheets = {}
+        self._sources = {}
         self._special_results = {}
         self._after_render = None
 
@@ -55,6 +56,7 @@ class PreviewManager:
             if current_group != target_group:
                 window.set_sheet_index(sheet, target_group, -1)
             window.focus_sheet(sheet)
+        self._sources[key] = (window, source_view)
         self._notify_after_render(window, source_view, source)
         return sheet
 
@@ -65,8 +67,7 @@ class PreviewManager:
         if sheet is None:
             return False
         if not self._is_sheet_in_window(sheet, window):
-            self._sheets.pop(key, None)
-            self._special_results.pop(key, None)
+            self._drop_association(key)
             return False
         return True
 
@@ -75,8 +76,7 @@ class PreviewManager:
         key = (window.id(), source_view.id())
         sheet = self._sheets.get(key)
         if sheet is None or not self._is_sheet_in_window(sheet, window):
-            self._sheets.pop(key, None)
-            self._special_results.pop(key, None)
+            self._drop_association(key)
             return None
 
         source, title, contents = self._render_preview(
@@ -88,6 +88,14 @@ class PreviewManager:
         sheet.set_contents(contents)
         self._notify_after_render(window, source_view, source)
         return sheet
+
+    def refresh_all(self, region_factory):
+        """Refresh every still-open preview after a settings or theme change."""
+        refreshed = 0
+        for window, source_view in list(self._sources.values()):
+            if self.refresh_preview(window, source_view, region_factory) is not None:
+                refreshed += 1
+        return refreshed
 
     def apply_special_results(self, window, source_view, region_factory, results):
         """Apply completed special blocks without scheduling another render pass."""
@@ -152,6 +160,11 @@ class PreviewManager:
     def _notify_after_render(self, window, source_view, source):
         if self._after_render is not None:
             self._after_render(window, source_view, source)
+
+    def _drop_association(self, key):
+        self._sheets.pop(key, None)
+        self._sources.pop(key, None)
+        self._special_results.pop(key, None)
 
     @staticmethod
     def _is_sheet_in_window(sheet, window):

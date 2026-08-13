@@ -258,6 +258,19 @@ if value < 10:
         self.assertNotIn("<img", html)
         self.assertIn("save the Markdown file to resolve this image", html)
 
+    def test_remote_https_image_is_rendered_only_with_explicit_policy(self):
+        from markdown_reader.security import SecurityPolicy
+
+        source = "![remote](https://images.example.com/diagram.png)"
+        blocked = render_markdown(source)
+        allowed = render_markdown(
+            source,
+            policy=SecurityPolicy(allow_remote_images=True),
+        )
+
+        self.assertNotIn('src="https://images.example.com/diagram.png"', blocked)
+        self.assertIn('src="https://images.example.com/diagram.png"', allowed)
+
     def test_oversized_source_returns_fixed_diagnostic_without_parsing(self):
         source = "# must not render"
 

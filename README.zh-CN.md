@@ -6,8 +6,8 @@ MarkdownReader 是 Sublime Text 4 的原生 Markdown 阅读与实时预览插件
 普通 Markdown 内容由 Sublime `HtmlSheet` 展示，Mermaid 图表与 MathJax 公式
 则通过本地无界面浏览器离线渲染为内嵌图片。
 
-> 最新版本：[0.1.0](https://github.com/SisyphusSQ/MarkdownReader/releases/tag/0.1.0)。
-> Package Control 收录会在首个 GitHub 版本经过真实使用验证后再单独推进。
+> 最新版本：[0.2.0](https://github.com/SisyphusSQ/MarkdownReader/releases/tag/0.2.0)。
+> Package Control 收录会在当前版本经过更广泛的真实使用验证后再单独推进。
 
 ## 当前可用能力
 
@@ -82,7 +82,7 @@ Content Security Policy 会阻断网络、文件、frame、form、media 与 obje
 ## 兼容目标
 
 - 已验证发布环境：macOS 上的 Sublime Text 4 Build 4200。
-- API 兼容目标为 Build 4065 或更高，但 0.1.0 尚未在每个较旧 Build 和操作系统上
+- API 兼容目标为 Build 4065 或更高，但 0.2.0 尚未在每个较旧 Build 和操作系统上
   完成同等强度的端到端验证。
 - Sublime 插件 API 环境使用 Python 3.8。
 - Mermaid 与 MathJax 渲染需要 Node.js 22.12 或更新版本以及 Chrome/Chromium。
@@ -95,9 +95,9 @@ Content Security Policy 会阻断网络、文件、frame、form、media 与 obje
 
 仓库根目录同时也是 Sublime package 根目录。
 
-## 安装 0.1.0
+## 安装 0.2.0
 
-从 [0.1.0 Release](https://github.com/SisyphusSQ/MarkdownReader/releases/tag/0.1.0)
+从 [0.2.0 Release](https://github.com/SisyphusSQ/MarkdownReader/releases/tag/0.2.0)
 下载 `MarkdownReader.sublime-package` 与 `SHA256SUMS`。包文件名必须保持为
 `MarkdownReader.sublime-package`，因为它同时是内置 renderer 使用的 Sublime
 资源命名空间。
@@ -179,8 +179,8 @@ MathJax 和 Puppeteer 版本。
 
 ## 已知限制
 
-- 0.1.0 已在 macOS + Sublime Text Build 4200 完整验证；其他平台和较旧 Build 仍需
-  更广泛的真实使用验证。
+- 0.1.0 的发布基线已在 macOS + Sublime Text Build 4200 完整验证；0.2.0 的变更已
+  通过自动化 CI 与发布资产校验，但其他平台和较旧 Build 仍需新的人工验证矩阵。
 - 原生预览中的 Mermaid/MathJax 是静态 PNG；交互缩放、浏览器打印与 PDF 导出只在
   浏览器完整预览中提供。
 - 本地图片仅支持已保存 Markdown 所在目录树内的 PNG、JPG、GIF；未保存文档无法
@@ -192,7 +192,7 @@ MathJax 和 Puppeteer 版本。
 ## 发布
 
 发布说明见
-[docs/release-notes/0.1.0.md](https://github.com/SisyphusSQ/MarkdownReader/blob/0.1.0/docs/release-notes/0.1.0.md)。
+[docs/release-notes/0.2.0.md](https://github.com/SisyphusSQ/MarkdownReader/blob/0.2.0/docs/release-notes/0.2.0.md)。
 后续 Package Control 收录将使用本仓库的 tag-based release。
 
 ## License

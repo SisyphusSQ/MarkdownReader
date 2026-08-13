@@ -6,6 +6,8 @@ The project uses semantic versioning for installable releases.
 
 ## Unreleased
 
+## 0.2.0 - 2026-08-13
+
 ### Added
 
 - Pipe-delimited Markdown tables, rendered as selectable minihtml divs in native

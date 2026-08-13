@@ -7,9 +7,9 @@ Sublime Text 4. It is designed to keep normal Markdown content inside a Sublime
 `HtmlSheet`, while rendering Mermaid diagrams and MathJax formulas locally as
 embedded images.
 
-> Latest release: [0.1.0](https://github.com/SisyphusSQ/MarkdownReader/releases/tag/0.1.0).
-> Package Control submission is intentionally deferred until after the first
-> GitHub release has received real-world validation.
+> Latest release: [0.2.0](https://github.com/SisyphusSQ/MarkdownReader/releases/tag/0.2.0).
+> Package Control submission remains intentionally deferred while the release
+> receives broader real-world validation.
 
 ## Available now
 
@@ -101,7 +101,7 @@ artifacts. It is a point-in-time snapshot; run the command again after editing.
 ## Compatibility target
 
 - Verified release environment: Sublime Text 4 Build 4200 on macOS.
-- Builds 4065 and newer are the API compatibility target, but 0.1.0 has not
+- Builds 4065 and newer are the API compatibility target, but 0.2.0 has not
   received the same end-to-end coverage on every older build or operating system.
 - Sublime plugin API environment: Python 3.8.
 - Mermaid and MathJax rendering requires Node.js 22.12 or newer plus Chrome or
@@ -116,10 +116,10 @@ are documented in
 
 The repository root is also the Sublime package root.
 
-## Install 0.1.0
+## Install 0.2.0
 
 Download `MarkdownReader.sublime-package` and `SHA256SUMS` from the
-[0.1.0 release](https://github.com/SisyphusSQ/MarkdownReader/releases/tag/0.1.0).
+[0.2.0 release](https://github.com/SisyphusSQ/MarkdownReader/releases/tag/0.2.0).
 Keep the package filename exactly `MarkdownReader.sublime-package`, because that
 name is also the Sublime resource namespace used by the bundled renderer.
 
@@ -210,9 +210,9 @@ the pinned Mermaid, MathJax, and Puppeteer versions.
 
 ## Known limitations
 
-- The 0.1.0 release is fully exercised on macOS with Sublime Text Build 4200;
-  other supported-looking platforms and older builds still need broader field
-  validation.
+- The 0.1.0 release baseline was fully exercised on macOS with Sublime Text
+  Build 4200; the 0.2.0 changes have automated CI and artifact coverage but
+  still need a new manual matrix on older builds and other platforms.
 - Native previews render Mermaid and MathJax as static PNG images. Interactive
   Mermaid zoom and browser printing/PDF export are available only in the full
   browser preview.
@@ -227,7 +227,7 @@ the pinned Mermaid, MathJax, and Puppeteer versions.
 ## Releases
 
 Release notes are available in
-[docs/release-notes/0.1.0.md](https://github.com/SisyphusSQ/MarkdownReader/blob/0.1.0/docs/release-notes/0.1.0.md).
+[docs/release-notes/0.2.0.md](https://github.com/SisyphusSQ/MarkdownReader/blob/0.2.0/docs/release-notes/0.2.0.md).
 A future Package Control submission will reference tag-based releases from this
 repository.
 

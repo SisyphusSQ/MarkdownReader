@@ -37,3 +37,33 @@ jobs:
 
       - name: Run unit tests
         run: python -m unittest discover -s tests -v
+
+  renderer:
+    name: Renderer bundle
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22.12"
+          cache: npm
+          cache-dependency-path: renderer/package-lock.json
+
+      - name: Install pinned renderer dependencies
+        run: npm ci
+        working-directory: renderer
+
+      - name: Audit runtime dependencies
+        run: npm audit --omit=dev
+        working-directory: renderer
+
+      - name: Rebuild committed runtime bundle
+        run: npm run build
+        working-directory: renderer
+
+      - name: Verify reproducible renderer bundle
+        run: git diff --exit-code -- renderer/server.js

@@ -28,6 +28,8 @@ embedded images.
 - Keep other link protocols inert and escape raw HTML.
 - Check Node.js, Chrome, and the local renderer protocol through
   **MarkdownReader: Check Renderer Environment**.
+- Render fenced `mermaid` blocks offline as transparent, theme-aware PNG images
+  while preserving the original diagram source below each image.
 
 ## Security defaults
 
@@ -90,11 +92,13 @@ uv pip install --python .venv/bin/python -r requirements-dev.txt
 .venv/bin/python -m unittest discover -s tests -v
 ```
 
-The special-block renderer is a lazy, reusable Node.js child process using
+The special-block renderer requires Node.js 22.12 or newer and Chrome or
+Chromium. It is a lazy, reusable Node.js child process using
 newline-delimited JSON over stdin/stdout; it never opens a listening port.
 Renderer resources bundled with the package are materialized under Sublime's
-cache directory when first needed. Mermaid and MathJax rendering are added in
-their dedicated development slices.
+cache directory when first needed. The pinned Mermaid and `puppeteer-core`
+runtime is committed as a single bundle, so end users do not run `npm install`.
+MathJax rendering is added in its dedicated development slice.
 
 ## Releases
 

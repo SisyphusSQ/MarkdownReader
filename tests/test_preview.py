@@ -1,5 +1,6 @@
 import unittest
 
+from markdown_reader.mermaid import MermaidRenderResult
 from markdown_reader.preview import PreviewManager, choose_side_by_side_group
 
 
@@ -98,8 +99,8 @@ class PreviewManagerTests(unittest.TestCase):
     def setUp(self):
         self.rendered_sources = []
 
-        def render(source, source_path=None):
-            self.rendered_sources.append((source, source_path))
+        def render(source, source_path=None, special_results=None):
+            self.rendered_sources.append((source, source_path, special_results or {}))
             return "<p>{}</p>".format(source)
 
         self.manager = PreviewManager(render)
@@ -109,7 +110,10 @@ class PreviewManagerTests(unittest.TestCase):
     def test_creates_html_sheet_from_current_unsaved_buffer(self):
         sheet = self.manager.open_preview(self.window, self.view, make_region)
 
-        self.assertEqual([("first unsaved revision", None)], self.rendered_sources)
+        self.assertEqual(
+            [("first unsaved revision", None, {})],
+            self.rendered_sources,
+        )
         self.assertEqual([(0, len(self.view.text))], self.view.requested_regions)
         self.assertEqual("notes.md — Preview", sheet.name)
         self.assertEqual("<p>first unsaved revision</p>", sheet.contents)
@@ -135,7 +139,10 @@ class PreviewManagerTests(unittest.TestCase):
         self.assertIsNot(closed_sheet, replacement)
         self.assertEqual(2, len(self.window.created_sheets))
         self.assertEqual(
-            [("first unsaved revision", None), ("first unsaved revision", None)],
+            [
+                ("first unsaved revision", None, {}),
+                ("first unsaved revision", None, {}),
+            ],
             self.rendered_sources,
         )
 
@@ -172,6 +179,9 @@ class PreviewManagerTests(unittest.TestCase):
 
     def test_does_not_recreate_closed_preview_during_refresh(self):
         sheet = self.manager.open_preview(self.window, self.view, make_region)
+        self.manager._special_results[(self.window.id(), self.view.id())] = {
+            "old": MermaidRenderResult.success("old-data")
+        }
         sheet.owner = None
 
         refreshed_sheet = self.manager.refresh_preview(self.window, self.view, make_region)
@@ -179,6 +189,7 @@ class PreviewManagerTests(unittest.TestCase):
         self.assertIsNone(refreshed_sheet)
         self.assertEqual(1, len(self.window.created_sheets))
         self.assertFalse(self.manager.has_preview(self.window, self.view))
+        self.assertEqual({}, self.manager._special_results)
 
     def test_accepts_equivalent_window_wrapper_for_open_sheet(self):
         sheet = self.manager.open_preview(self.window, self.view, make_region)
@@ -204,7 +215,39 @@ class PreviewManagerTests(unittest.TestCase):
         sheet = self.manager.open_preview(self.window, view, make_region)
 
         self.assertEqual("guide.md — Preview", sheet.name)
-        self.assertEqual([("saved", "/project/docs/guide.md")], self.rendered_sources)
+        self.assertEqual(
+            [("saved", "/project/docs/guide.md", {})],
+            self.rendered_sources,
+        )
+
+    def test_notifies_after_open_and_refresh_but_not_after_result_application(self):
+        notifications = []
+        self.manager.set_after_render(
+            lambda window, view, source: notifications.append((window, view, source))
+        )
+        sheet = self.manager.open_preview(self.window, self.view, make_region)
+
+        self.view.text = "second unsaved revision"
+        self.manager.refresh_preview(self.window, self.view, make_region)
+        self.manager.apply_special_results(
+            self.window,
+            self.view,
+            make_region,
+            {"diagram": MermaidRenderResult.success("png-data")},
+        )
+
+        self.assertEqual(
+            [
+                (self.window, self.view, "first unsaved revision"),
+                (self.window, self.view, "second unsaved revision"),
+            ],
+            notifications,
+        )
+        self.assertEqual(
+            {"diagram": MermaidRenderResult.success("png-data")},
+            self.rendered_sources[-1][2],
+        )
+        self.assertEqual(2, len(sheet.content_updates))
 
 
 class SideBySideGroupTests(unittest.TestCase):

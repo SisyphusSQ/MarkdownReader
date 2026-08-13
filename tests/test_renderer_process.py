@@ -63,6 +63,17 @@ class RendererProcessTests(unittest.TestCase):
 
         self.assertEqual(0, process.terminated)
 
+    def test_oversized_response_terminates_process(self):
+        process = FakeProcess(
+            ['{"id":1,"ok":true,"result":{"data":"' + "x" * 200 + '"}}\n']
+        )
+        client = RendererProcess(lambda: process, max_response_bytes=64)
+
+        with self.assertRaisesRegex(RendererProtocolError, "response exceeds"):
+            client.request("renderMermaid")
+
+        self.assertEqual(1, process.terminated)
+
     def test_close_is_idempotent(self):
         process = FakeProcess(['{"id":1,"ok":true,"result":{}}\n'])
         client = RendererProcess(lambda: process)

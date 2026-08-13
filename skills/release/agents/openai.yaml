@@ -1,0 +1,4 @@
+interface:
+  display_name: "MarkdownReader Release"
+  short_description: "Release MarkdownReader packages and GitHub assets"
+  default_prompt: "Use $release to prepare, verify, and publish a MarkdownReader release."

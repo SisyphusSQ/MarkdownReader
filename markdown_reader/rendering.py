@@ -1,5 +1,8 @@
 """Convert Markdown into a self-contained minihtml document."""
 
+import json
+
+from .mathjax import math_formula_key, math_plugin
 from .mermaid import mermaid_block_key
 from .security import DEFAULT_SECURITY_POLICY
 from .vendor.mistune import create_markdown
@@ -157,6 +160,52 @@ class MinihtmlRenderer(HTMLRenderer):
         )
         return '<div class="mermaid-block">{}{}</div>\n'.format(rendered, source)
 
+    def block_math(self, tex, delimiter="dollar"):
+        """Render a display formula result with a trusted copy command link."""
+        return self._render_math(tex, display=True, delimiter=delimiter)
+
+    def inline_math(self, tex, delimiter="bracket"):
+        """Render an inline formula result with explicit baseline alignment."""
+        return self._render_math(tex, display=False, delimiter=delimiter)
+
+    def _render_math(self, tex, display, delimiter):
+        result = self._special_results.get(math_formula_key(tex, display))
+        if result is None:
+            rendered = '<em class="math-status">Rendering formula…</em>'
+        elif result.error:
+            rendered = '<em class="math-error">MathJax: {}</em>'.format(
+                escape(result.error)
+            )
+        else:
+            dimensions = ' width="{}" height="{}"'.format(
+                result.width,
+                result.height,
+            )
+            style = ""
+            image_class = "block-math-image" if display else "inline-math-image"
+            if not display and result.baseline_offset:
+                style = ' style="position: relative; top: {}px"'.format(
+                    result.baseline_offset
+                )
+            rendered = (
+                '<img class="math-image {}" '
+                'src="data:image/png;base64,{}" alt="Rendered formula"{}{} />'
+            ).format(image_class, result.data, dimensions, style)
+
+        copy_payload = json.dumps(
+            {"text": tex},
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+        copy_href = escape("subl:markdown_reader_copy_tex " + copy_payload)
+        copy_link = '<a class="math-copy" href="{}">Copy TeX</a>'.format(copy_href)
+        if display:
+            return (
+                '<div class="math-block"><div class="math-image-container">{}</div>'
+                '<div class="math-actions">{}</div></div>\n'
+            ).format(rendered, copy_link)
+        return "{} {}".format(rendered, copy_link)
+
 
 _DOCUMENT_PREFIX = """<html>
 <head>
@@ -221,6 +270,30 @@ div.mermaid-status, div.mermaid-error {
 div.mermaid-error {
     color: var(--redish);
 }
+div.math-block {
+    margin-top: 0.6rem;
+    margin-bottom: 0.6rem;
+    padding: 0.8rem;
+    border-radius: 0.3rem;
+    background-color: color(var(--foreground) alpha(0.04));
+}
+div.math-image-container {
+    text-align: center;
+}
+div.math-actions {
+    margin-top: 0.35rem;
+    text-align: center;
+}
+em.math-status, em.math-error {
+    color: var(--accent);
+}
+em.math-error {
+    color: var(--redish);
+}
+a.math-copy {
+    font-size: 0.85rem;
+    opacity: 0.72;
+}
 div.mermaid-source code {
     display: block;
     font-family: monospace;
@@ -240,6 +313,7 @@ def render_markdown(
     source_path=None,
     policy=DEFAULT_SECURITY_POLICY,
     special_results=None,
+    allow_single_dollar_math=False,
 ):
     """Return theme-aware minihtml for a Markdown source string."""
     rejection_reason = policy.source_rejection_reason(source)
@@ -252,5 +326,8 @@ def render_markdown(
         policy=policy,
         special_results=special_results,
     )
-    markdown = create_markdown(renderer=renderer, plugins=[task_lists])
+    markdown = create_markdown(
+        renderer=renderer,
+        plugins=[task_lists, math_plugin(allow_single_dollar_math)],
+    )
     return _DOCUMENT_PREFIX + markdown(source) + _DOCUMENT_SUFFIX

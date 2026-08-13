@@ -30,6 +30,14 @@ embedded images.
   **MarkdownReader: Check Renderer Environment**.
 - Render fenced `mermaid` blocks offline as transparent, theme-aware PNG images
   while preserving the original diagram source below each image.
+- Render `\(...\)` inline formulas plus `$$...$$` and `\[...\]` display
+  formulas through local MathJax as transparent PNG images. Single-dollar math
+  is disabled by default so currency remains ordinary text; each formula has a
+  **Copy TeX** action.
+
+To opt in to `$...$` inline formulas, open **Preferences: Package Settings →
+MarkdownReader → Settings** and set `"math_single_dollar": true`. The default
+remains `false`.
 
 ## Security defaults
 
@@ -96,9 +104,9 @@ The special-block renderer requires Node.js 22.12 or newer and Chrome or
 Chromium. It is a lazy, reusable Node.js child process using
 newline-delimited JSON over stdin/stdout; it never opens a listening port.
 Renderer resources bundled with the package are materialized under Sublime's
-cache directory when first needed. The pinned Mermaid and `puppeteer-core`
-runtime is committed as a single bundle, so end users do not run `npm install`.
-MathJax rendering is added in its dedicated development slice.
+cache directory when first needed. The pinned Mermaid, MathJax, and
+`puppeteer-core` runtime is committed as a single bundle, so end users do not
+run `npm install`.
 
 ## Releases
 

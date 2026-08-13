@@ -1,0 +1,4 @@
+{
+    // Enable $...$ inline formulas. Disabled by default so currency remains text.
+    "math_single_dollar": false
+}

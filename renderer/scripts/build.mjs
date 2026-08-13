@@ -16,12 +16,25 @@ const browserBundle = await build({
   write: false,
 });
 
+const mathJaxWorkerBundle = await build({
+  entryPoints: [path.join(rendererDirectory, "src", "mathjax-worker.js")],
+  bundle: true,
+  format: "iife",
+  legalComments: "eof",
+  minify: true,
+  platform: "node",
+  target: ["node22"],
+  write: false,
+});
+
 await build({
   entryPoints: [path.join(rendererDirectory, "src", "server.js")],
   bundle: true,
   define: {
     __MERMAID_BROWSER_SOURCE__: JSON.stringify(browserBundle.outputFiles[0].text),
+    __MATHJAX_WORKER_SOURCE__: JSON.stringify(mathJaxWorkerBundle.outputFiles[0].text),
     __MERMAID_VERSION__: JSON.stringify("11.16.1"),
+    __MATHJAX_VERSION__: JSON.stringify("4.1.3"),
     __PUPPETEER_VERSION__: JSON.stringify("25.6.0"),
   },
   format: "cjs",

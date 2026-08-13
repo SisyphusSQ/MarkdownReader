@@ -21,5 +21,8 @@ The project intends to use semantic versioning once it has an installable releas
 - Lazy reusable NDJSON renderer process with Node/Chrome diagnostics and lifecycle cleanup.
 - Offline static Mermaid rendering with pinned local assets, transparent PNG output,
   per-block errors, theme/viewport sizing, network blocking, and isolated Chrome profiles.
+- Offline static MathJax rendering for inline and display formulas with transparent,
+  theme-aware PNG output, baseline alignment, per-formula errors, Copy TeX, and an
+  opt-in single-dollar delimiter setting.
 - Vendored Mistune 3.3.0 runtime subset with Python 3.8 compatibility adjustments.
 - Unit tests, a manual preview fixture, a project-local uv workflow, and CI checks.

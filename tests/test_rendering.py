@@ -2,6 +2,7 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+from markdown_reader.mathjax import MathRenderResult, math_formula_key
 from markdown_reader.mermaid import MermaidRenderResult, mermaid_block_key
 from markdown_reader.rendering import render_markdown
 from markdown_reader.security import SecurityPolicy
@@ -114,6 +115,62 @@ if value < 10:
         self.assertIn("<p>After</p>", html)
         self.assertIn("Parse &lt;error&gt;", html)
         self.assertNotIn("Parse <error>", html)
+
+    def test_math_formulas_start_as_placeholders_and_single_dollars_stay_text(self):
+        html = render_markdown(r"Inline \(x^2\), price $12.50, and $$y=1$$.")
+
+        self.assertIn('class="math-status"', html)
+        self.assertIn("Rendering formula", html)
+        self.assertIn("$12.50", html)
+        self.assertNotIn(r"\(x^2\)", html)
+
+    def test_single_dollar_math_can_be_enabled(self):
+        html = render_markdown(
+            "Inline $x+y$ formula",
+            allow_single_dollar_math=True,
+        )
+
+        self.assertIn('class="math-status"', html)
+        self.assertNotIn("$x+y$", html)
+
+    def test_math_formula_embeds_png_with_baseline_and_copy_tex_entry(self):
+        tex = 'x^2 + " onclick="bad <tag>'
+        result = MathRenderResult.success(
+            "iVBORw0KGgoAAAANSUhEUg==",
+            width=40,
+            height=20,
+            baseline_offset=3.5,
+        )
+
+        html = render_markdown(
+            r"Before \({}\) after".format(tex),
+            special_results={math_formula_key(tex, False): result},
+        )
+
+        self.assertIn('class="math-image inline-math-image"', html)
+        self.assertIn('width="40" height="20"', html)
+        self.assertIn("top: 3.5px", html)
+        self.assertIn("subl:markdown_reader_copy_tex", html)
+        self.assertIn("Copy TeX", html)
+        self.assertNotIn('onclick="', html)
+        self.assertNotIn("<tag>", html)
+        self.assertNotIn("Rendering formula", html)
+
+    def test_block_math_error_is_isolated_and_source_is_escaped(self):
+        tex = r"\bad{<unsafe>}"
+        result = MathRenderResult.failure("Undefined <control> sequence")
+
+        html = render_markdown(
+            "Before\n\n$$\n{}\n$$\n\nAfter".format(tex),
+            special_results={math_formula_key(tex, True): result},
+        )
+
+        self.assertIn("<p>Before</p>", html)
+        self.assertIn("<p>After</p>", html)
+        self.assertIn("Undefined &lt;control&gt; sequence", html)
+        self.assertNotIn("Undefined <control> sequence", html)
+        self.assertIn("Copy TeX", html)
+        self.assertNotIn("<unsafe>", html)
 
     def test_activates_http_and_https_links(self):
         html = render_markdown(

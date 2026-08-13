@@ -4,19 +4,24 @@ const fs = require("node:fs/promises");
 const os = require("node:os");
 const path = require("node:path");
 const readline = require("node:readline");
+const {Worker} = require("node:worker_threads");
 const puppeteer = require("puppeteer-core");
 
 const MERMAID_BROWSER_SOURCE = __MERMAID_BROWSER_SOURCE__;
+const MATHJAX_WORKER_SOURCE = __MATHJAX_WORKER_SOURCE__;
 const MERMAID_VERSION = __MERMAID_VERSION__;
+const MATHJAX_VERSION = __MATHJAX_VERSION__;
 const PUPPETEER_VERSION = __PUPPETEER_VERSION__;
 const MAX_MESSAGE_BYTES = 2 * 1024 * 1024;
 const MAX_MERMAID_SOURCE_BYTES = 128 * 1024;
+const MAX_MATH_SOURCE_BYTES = 32 * 1024;
+const MAX_MATH_MARKUP_BYTES = 5 * 1024 * 1024;
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const MAX_PIXEL_DIMENSION = 4096;
 const RENDER_TIMEOUT_MS = 10_000;
 const ALLOWED_THEMES = new Set(["default", "dark"]);
 
-class MermaidRenderer {
+class SpecialBlockRenderer {
   constructor(chromePath) {
     this.chromePath = chromePath;
     this.browser = null;
@@ -192,6 +197,144 @@ class MermaidRenderer {
     }
   }
 
+  async renderMathJax(params) {
+    const options = validateMathJaxParams(params);
+    const markup = await renderMathJaxMarkup(options);
+    if (Buffer.byteLength(markup, "utf8") > MAX_MATH_MARKUP_BYTES) {
+      throw new Error("MathJax output exceeds the 5 MiB markup limit");
+    }
+    const browser = await this.ensureBrowser();
+    const page = await browser.newPage();
+    try {
+      page.setDefaultTimeout(RENDER_TIMEOUT_MS);
+      await page.setViewport({
+        width: options.width,
+        height: 800,
+        deviceScaleFactor: options.scale,
+      });
+      await page.setRequestInterception(true);
+      await page.setOfflineMode(true);
+      let blockedNetworkRequests = 0;
+      page.on("request", (request) => {
+        if (request.isInterceptResolutionHandled()) {
+          return;
+        }
+        const requestUrl = request.url();
+        if (requestUrl === "about:blank" || requestUrl.startsWith("data:")) {
+          request.continue();
+        } else {
+          blockedNetworkRequests += 1;
+          request.abort("blockedbyclient");
+        }
+      });
+      await page.setContent(
+        "<!doctype html><html><head><meta charset=\"utf-8\">" +
+          "<meta http-equiv=\"Content-Security-Policy\" " +
+          "content=\"default-src 'none'; img-src data:; style-src 'unsafe-inline'\">" +
+          "<style>html,body{margin:0;padding:0;background:transparent;overflow:visible}" +
+          "#line{display:inline-block;white-space:nowrap;line-height:normal}" +
+          "#formula{display:inline-block;background:transparent}" +
+          "#baseline{display:inline-block;width:0;height:0;margin:0;padding:0}" +
+          "</style></head><body><span id=\"line\"><span id=\"formula\"></span>" +
+          "<span id=\"baseline\"></span></span></body></html>",
+        {waitUntil: "domcontentloaded"},
+      );
+
+      const bounds = await withTimeout(
+        page.evaluate(
+          ({svgMarkup, display, fontSize, theme}) => {
+            const formula = document.getElementById("formula");
+            const line = document.getElementById("line");
+            line.style.fontSize = `${fontSize}px`;
+            line.style.color = theme === "dark" ? "#f0f0f0" : "#2f3337";
+            formula.innerHTML = svgMarkup;
+            const container = formula.querySelector("mjx-container");
+            const svg = formula.querySelector("svg");
+            if (!container || !svg) {
+              throw new Error("MathJax did not produce an SVG formula");
+            }
+            if (formula.querySelector("script,foreignObject,image,iframe,object,a")) {
+              throw new Error("MathJax produced unsupported active content");
+            }
+            for (const element of formula.querySelectorAll("[href], [src]")) {
+              const resource = element.getAttribute("href") || element.getAttribute("src");
+              if (resource && !resource.startsWith("#") && !resource.startsWith("data:")) {
+                throw new Error("MathJax formula requested blocked network content");
+              }
+            }
+            container.style.margin = "0";
+            container.style.display = "inline-block";
+            const rectangle = container.getBoundingClientRect();
+            const baseline = document.getElementById("baseline").getBoundingClientRect();
+            if (!(rectangle.width > 0 && rectangle.height > 0)) {
+              throw new Error("MathJax produced an empty formula");
+            }
+            return {
+              width: rectangle.width,
+              height: rectangle.height,
+              baselineOffset: display ? 0 : Math.max(0, rectangle.bottom - baseline.top),
+            };
+          },
+          {
+            svgMarkup: markup,
+            display: options.display,
+            fontSize: options.fontSize,
+            theme: options.theme,
+          },
+        ),
+        RENDER_TIMEOUT_MS,
+        "MathJax layout timed out",
+      );
+      if (blockedNetworkRequests > 0) {
+        throw new Error("MathJax formula requested blocked network content");
+      }
+
+      const pixelWidth = Math.ceil(bounds.width * options.scale);
+      const pixelHeight = Math.ceil(bounds.height * options.scale);
+      if (
+        pixelWidth <= 0 ||
+        pixelHeight <= 0 ||
+        pixelWidth > MAX_PIXEL_DIMENSION ||
+        pixelHeight > MAX_PIXEL_DIMENSION
+      ) {
+        throw new Error("rendered formula exceeds the 4096-pixel dimension limit");
+      }
+
+      const formula = await page.$("#formula mjx-container");
+      if (!formula) {
+        throw new Error("MathJax formula disappeared before capture");
+      }
+      const data = await withTimeout(
+        formula.screenshot({encoding: "base64", omitBackground: true, type: "png"}),
+        RENDER_TIMEOUT_MS,
+        "MathJax capture timed out",
+      );
+      if (blockedNetworkRequests > 0) {
+        throw new Error("MathJax formula requested blocked network content");
+      }
+      const image = Buffer.from(data, "base64");
+      if (image.length > MAX_IMAGE_BYTES) {
+        throw new Error("rendered formula exceeds the 5 MiB image limit");
+      }
+      if (
+        image.length < 24 ||
+        image.subarray(0, 8).compare(Buffer.from("89504e470d0a1a0a", "hex")) !== 0
+      ) {
+        throw new Error("browser capture did not return a PNG image");
+      }
+      return {
+        mimeType: "image/png",
+        data,
+        width: image.readUInt32BE(16),
+        height: image.readUInt32BE(20),
+        baselineOffset: bounds.baselineOffset,
+        blockedNetworkRequests,
+      };
+    } finally {
+      await page.close().catch(() => {});
+    }
+  }
+
   async ensureBrowser() {
     if (this.browser && this.browser.connected) {
       return this.browser;
@@ -266,6 +409,73 @@ function validateRenderParams(params) {
   return params;
 }
 
+function validateMathJaxParams(params) {
+  if (!params || typeof params.source !== "string") {
+    throw new Error("MathJax source must be a string");
+  }
+  if (Buffer.byteLength(params.source, "utf8") > MAX_MATH_SOURCE_BYTES) {
+    throw new Error("MathJax source exceeds the 32 KiB rendering limit");
+  }
+  if (typeof params.display !== "boolean") {
+    throw new Error("MathJax display must be a boolean");
+  }
+  if (!ALLOWED_THEMES.has(params.theme)) {
+    throw new Error("MathJax theme must be default or dark");
+  }
+  if (!Number.isInteger(params.width) || params.width < 320 || params.width > 1600) {
+    throw new Error("MathJax width must be an integer from 320 to 1600");
+  }
+  if (!Number.isInteger(params.scale) || params.scale < 1 || params.scale > 3) {
+    throw new Error("MathJax scale must be an integer from 1 to 3");
+  }
+  if (!Number.isInteger(params.fontSize) || params.fontSize < 8 || params.fontSize > 64) {
+    throw new Error("MathJax font size must be an integer from 8 to 64");
+  }
+  return params;
+}
+
+function renderMathJaxMarkup(options) {
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(MATHJAX_WORKER_SOURCE, {
+      eval: true,
+      workerData: options,
+    });
+    let finished = false;
+    const timeout = setTimeout(() => {
+      if (finished) {
+        return;
+      }
+      finished = true;
+      worker.terminate().catch(() => {});
+      reject(new Error("MathJax rendering timed out"));
+    }, RENDER_TIMEOUT_MS);
+
+    const finish = (action) => {
+      if (finished) {
+        return;
+      }
+      finished = true;
+      clearTimeout(timeout);
+      action();
+    };
+    worker.once("message", (message) => {
+      finish(() => {
+        if (!message || !message.ok || typeof message.markup !== "string") {
+          reject(new Error((message && message.error) || "MathJax worker failed"));
+          return;
+        }
+        resolve(message.markup);
+      });
+    });
+    worker.once("error", (error) => finish(() => reject(error)));
+    worker.once("exit", (code) => {
+      if (code !== 0) {
+        finish(() => reject(new Error("MathJax worker exited unexpectedly")));
+      }
+    });
+  });
+}
+
 function withTimeout(promise, timeoutMs, message) {
   let timeout;
   const rejection = new Promise((_, reject) => {
@@ -287,7 +497,7 @@ function respond(message) {
   process.stdout.write(`${JSON.stringify(message)}\n`);
 }
 
-const renderer = new MermaidRenderer(process.env.MARKDOWN_READER_CHROME_PATH || "");
+const renderer = new SpecialBlockRenderer(process.env.MARKDOWN_READER_CHROME_PATH || "");
 const input = readline.createInterface({input: process.stdin, crlfDelay: Infinity});
 
 async function handleLine(line) {
@@ -311,11 +521,12 @@ async function handleLine(line) {
         ok: true,
         result: {
           pong: true,
-          protocolVersion: 2,
+          protocolVersion: 3,
           processId: process.pid,
           nodeVersion: process.version,
           chromePath: process.env.MARKDOWN_READER_CHROME_PATH || "",
           mermaidVersion: MERMAID_VERSION,
+          mathJaxVersion: MATHJAX_VERSION,
           puppeteerVersion: PUPPETEER_VERSION,
         },
       });
@@ -323,6 +534,10 @@ async function handleLine(line) {
     }
     if (request.method === "renderMermaid") {
       respond({id: request.id, ok: true, result: await renderer.render(request.params)});
+      return;
+    }
+    if (request.method === "renderMathJax") {
+      respond({id: request.id, ok: true, result: await renderer.renderMathJax(request.params)});
       return;
     }
     respond({id: request.id, ok: false, error: "unsupported renderer request"});

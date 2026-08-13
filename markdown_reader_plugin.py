@@ -8,6 +8,7 @@ import tempfile
 import sublime
 import sublime_plugin
 
+from .markdown_reader.mathjax import MathJaxController, MathRenderOptions
 from .markdown_reader.mermaid import (
     MermaidController,
     MermaidRenderOptions,
@@ -20,7 +21,19 @@ from .markdown_reader.renderer_process import RendererProcess
 from .markdown_reader.rendering import render_markdown
 
 LOGGER = logging.getLogger(__name__)
-PREVIEW_MANAGER = PreviewManager(render_markdown)
+
+
+def _single_dollar_math_enabled():
+    settings = sublime.load_settings("MarkdownReader.sublime-settings")
+    return bool(settings.get("math_single_dollar", False))
+
+
+def _render_markdown_with_settings(*args, **kwargs):
+    kwargs["allow_single_dollar_math"] = _single_dollar_math_enabled()
+    return render_markdown(*args, **kwargs)
+
+
+PREVIEW_MANAGER = PreviewManager(_render_markdown_with_settings)
 REFRESH_SCHEDULER = DebouncedRefreshScheduler(sublime.set_timeout)
 LIVE_PREVIEW_CONTROLLER = LivePreviewController(
     PREVIEW_MANAGER,
@@ -95,6 +108,23 @@ def _mermaid_render_options(source_view):
     )
 
 
+def _mathjax_render_options(source_view):
+    style = source_view.style_for_scope("text") or {}
+    viewport_width, _ = source_view.viewport_extent()
+    target_width = max(320, min(1600, int(viewport_width) - 64))
+    configured_font_size = source_view.settings().get("font_size", 16)
+    try:
+        font_size = int(round(float(configured_font_size)))
+    except (TypeError, ValueError):
+        font_size = 16
+    return MathRenderOptions(
+        theme=mermaid_theme_for_background(style.get("background", "")),
+        width=target_width,
+        scale=2,
+        font_size=max(8, min(64, font_size)),
+    )
+
+
 MERMAID_CONTROLLER = MermaidController(
     preview_manager=PREVIEW_MANAGER,
     renderer_provider=_get_renderer_process,
@@ -103,7 +133,27 @@ MERMAID_CONTROLLER = MermaidController(
     region_factory=sublime.Region,
     options_provider=_mermaid_render_options,
 )
-PREVIEW_MANAGER.set_after_render(MERMAID_CONTROLLER.preview_updated)
+MATHJAX_CONTROLLER = MathJaxController(
+    preview_manager=PREVIEW_MANAGER,
+    renderer_provider=_get_renderer_process,
+    schedule_async=sublime.set_timeout_async,
+    schedule_main=sublime.set_timeout,
+    region_factory=sublime.Region,
+    options_provider=_mathjax_render_options,
+)
+
+
+def _render_special_blocks(window, source_view, source):
+    MERMAID_CONTROLLER.preview_updated(window, source_view, source)
+    MATHJAX_CONTROLLER.preview_updated(
+        window,
+        source_view,
+        source,
+        allow_single_dollar=_single_dollar_math_enabled(),
+    )
+
+
+PREVIEW_MANAGER.set_after_render(_render_special_blocks)
 
 
 def plugin_unloaded():
@@ -147,6 +197,17 @@ class MarkdownReaderOpenPreviewSideBySideCommand(sublime_plugin.WindowCommand):
         _open_preview(self.window, side_by_side=True)
 
 
+class MarkdownReaderCopyTexCommand(sublime_plugin.WindowCommand):
+    """Copy TeX supplied only by MarkdownReader's trusted generated markup."""
+
+    def run(self, text=""):
+        if not isinstance(text, str) or len(text.encode("utf-8")) > 32 * 1024:
+            sublime.error_message("MarkdownReader could not copy this TeX formula")
+            return
+        sublime.set_clipboard(text)
+        sublime.status_message("MarkdownReader: TeX copied")
+
+
 class MarkdownReaderLivePreviewListener(sublime_plugin.EventListener):
     """Schedule a debounced update after the source buffer changes."""
 
@@ -184,12 +245,13 @@ class MarkdownReaderCheckRendererEnvironmentCommand(sublime_plugin.WindowCommand
 
         message = (
             "MarkdownReader renderer is ready.\n\n"
-            "Node: {}\nChrome: {}\nProtocol: {}\nMermaid: {}\nPuppeteer: {}"
+            "Node: {}\nChrome: {}\nProtocol: {}\nMermaid: {}\nMathJax: {}\nPuppeteer: {}"
         ).format(
             result["nodeVersion"],
             environment.chrome_path,
             result["protocolVersion"],
             result["mermaidVersion"],
+            result["mathJaxVersion"],
             result["puppeteerVersion"],
         )
         sublime.set_timeout(lambda: sublime.message_dialog(message))

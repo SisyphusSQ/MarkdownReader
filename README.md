@@ -34,6 +34,9 @@ embedded images.
   formulas through local MathJax as transparent PNG images. Single-dollar math
   is disabled by default so currency remains ordinary text; each formula has a
   **Copy TeX** action.
+- Re-render only changed Mermaid and MathJax sources. Completed results use a
+  shared in-memory LRU cache bounded to 128 entries and an estimated 64 MiB;
+  cache keys include the renderer/version and every visual render option.
 
 To opt in to `$...$` inline formulas, open **Preferences: Package Settings →
 MarkdownReader → Settings** and set `"math_single_dollar": true`. The default
@@ -106,7 +109,8 @@ newline-delimited JSON over stdin/stdout; it never opens a listening port.
 Renderer resources bundled with the package are materialized under Sublime's
 cache directory when first needed. The pinned Mermaid, MathJax, and
 `puppeteer-core` runtime is committed as a single bundle, so end users do not
-run `npm install`.
+run `npm install`. Rendered diagram and formula images are cached only in
+memory, are cleared when the plugin unloads, and are never written to disk.
 
 ## Releases
 

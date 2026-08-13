@@ -5,6 +5,8 @@ import hashlib
 import math
 from dataclasses import dataclass
 
+from .render_cache import BoundedMemoryCache, RenderCacheKey
+from .renderer_process import RendererProtocolError
 from .vendor.mistune import create_markdown
 
 MAX_DOCUMENT_BYTES = 2 * 1024 * 1024
@@ -12,6 +14,7 @@ MAX_FORMULA_SOURCE_BYTES = 32 * 1024
 MAX_RENDERED_IMAGE_BYTES = 5 * 1024 * 1024
 MAX_RENDERED_DIMENSION = 4096
 _PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+MATHJAX_RENDERER_VERSION = "4.1.3"
 
 _BLOCK_DOLLAR_PATTERN = (
     r"^ {0,3}\$\$(?:[ \t]*\n(?P<math_dollar_multiline>[\s\S]+?)\n"
@@ -43,6 +46,7 @@ class MathRenderResult:
     width: int = 0
     height: int = 0
     baseline_offset: float = 0
+    cacheable: bool = True
 
     @classmethod
     def success(cls, data, width=0, height=0, baseline_offset=0):
@@ -54,8 +58,8 @@ class MathRenderResult:
         )
 
     @classmethod
-    def failure(cls, error):
-        return cls(error=error)
+    def failure(cls, error, cacheable=True):
+        return cls(error=error, cacheable=cacheable)
 
 
 @dataclass(frozen=True)
@@ -72,7 +76,22 @@ def math_formula_key(tex, display):
     """Return a deterministic identity separated by inline/display mode."""
     mode = "display" if display else "inline"
     payload = "mathjax\0{}\0{}".format(mode, tex)
-    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+    digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()
+    return "mathjax:{}".format(digest)
+
+
+def math_render_cache_key(formula, options):
+    """Return the full identity of one rendered MathJax image."""
+    return RenderCacheKey(
+        renderer="mathjax",
+        version=MATHJAX_RENDERER_VERSION,
+        source=formula.tex,
+        theme=options.theme,
+        width=options.width,
+        scale=options.scale,
+        font_size=options.font_size,
+        display=formula.display,
+    )
 
 
 def _parse_block_math(parser, match, state, delimiter):
@@ -210,6 +229,7 @@ class MathJaxController:
         region_factory,
         options_provider,
         allow_single_dollar=False,
+        cache=None,
     ):
         self._preview_manager = preview_manager
         self._renderer_provider = renderer_provider
@@ -218,6 +238,7 @@ class MathJaxController:
         self._region_factory = region_factory
         self._options_provider = options_provider
         self._allow_single_dollar = allow_single_dollar
+        self._cache = cache if cache is not None else BoundedMemoryCache()
 
     def preview_updated(
         self,
@@ -230,6 +251,12 @@ class MathJaxController:
         if allow_single_dollar is None:
             allow_single_dollar = self._allow_single_dollar
         formulas = extract_math_formulas(source, allow_single_dollar)
+        self._preview_manager.retain_special_results(
+            window,
+            source_view,
+            "mathjax",
+            {formula.key for formula in formulas},
+        )
         if not formulas:
             return
         options = self._options_provider(source_view)
@@ -245,18 +272,36 @@ class MathJaxController:
 
     def _render_revision(self, window, source_view, source, formulas, options):
         unique_formulas = {formula.key: formula for formula in formulas}
-        try:
-            renderer = self._renderer_provider()
-        except Exception as error:
-            message = _concise_error(error)
-            results = {
-                key: MathRenderResult.failure(message) for key in unique_formulas
-            }
-        else:
-            results = {
-                key: self._render_formula(renderer, formula, options)
-                for key, formula in unique_formulas.items()
-            }
+        results = {}
+        missing = {}
+        for key, formula in unique_formulas.items():
+            cache_key = math_render_cache_key(formula, options)
+            cached = self._cache.get(cache_key)
+            if cached is None:
+                missing[key] = (formula, cache_key)
+            else:
+                results[key] = cached
+
+        if missing:
+            try:
+                renderer = self._renderer_provider()
+            except Exception as error:
+                message = _concise_error(error)
+                results.update(
+                    {key: MathRenderResult.failure(message) for key in missing}
+                )
+            else:
+                for key, (formula, cache_key) in missing.items():
+                    result, _reused = self._cache.get_or_compute(
+                        cache_key,
+                        lambda formula=formula: self._render_formula(
+                            renderer,
+                            formula,
+                            options,
+                        ),
+                        should_store=lambda candidate: candidate.cacheable,
+                    )
+                    results[key] = result
 
         self._schedule_main(
             lambda: self._apply_if_current(window, source_view, source, results)
@@ -281,6 +326,11 @@ class MathJaxController:
                 },
             )
             return self._validated_result(response, options.scale)
+        except (TimeoutError, RendererProtocolError) as error:
+            return MathRenderResult.failure(
+                _concise_error(error),
+                cacheable=False,
+            )
         except Exception as error:
             return MathRenderResult.failure(_concise_error(error))
 

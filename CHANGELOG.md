@@ -24,5 +24,8 @@ The project intends to use semantic versioning once it has an installable releas
 - Offline static MathJax rendering for inline and display formulas with transparent,
   theme-aware PNG output, baseline alignment, per-formula errors, Copy TeX, and an
   opt-in single-dollar delimiter setting.
+- Incremental Mermaid and MathJax rendering backed by a shared, bounded in-memory
+  LRU cache with full renderer-option keys, same-key work coalescing, stale-revision
+  rejection, and unload cleanup.
 - Vendored Mistune 3.3.0 runtime subset with Python 3.8 compatibility adjustments.
 - Unit tests, a manual preview fixture, a project-local uv workflow, and CI checks.

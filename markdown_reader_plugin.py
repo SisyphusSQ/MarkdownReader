@@ -4,6 +4,7 @@ import logging
 import os
 import subprocess
 import tempfile
+import threading
 
 import sublime
 import sublime_plugin
@@ -16,6 +17,7 @@ from .markdown_reader.mermaid import (
 )
 from .markdown_reader.preview import PreviewManager, choose_side_by_side_group
 from .markdown_reader.refresh import DebouncedRefreshScheduler, LivePreviewController
+from .markdown_reader.render_cache import BoundedMemoryCache
 from .markdown_reader.renderer_environment import RendererEnvironmentDetector
 from .markdown_reader.renderer_process import RendererProcess
 from .markdown_reader.rendering import render_markdown
@@ -41,6 +43,8 @@ LIVE_PREVIEW_CONTROLLER = LivePreviewController(
     sublime.Region,
 )
 RENDERER_PROCESS = None
+RENDERER_PROCESS_LOCK = threading.Lock()
+RENDER_CACHE = BoundedMemoryCache()
 
 
 def _materialize_renderer_resource():
@@ -87,14 +91,15 @@ def _create_renderer(environment):
 
 def _get_renderer_process():
     global RENDERER_PROCESS
-    if RENDERER_PROCESS is not None:
-        return RENDERER_PROCESS
+    with RENDERER_PROCESS_LOCK:
+        if RENDERER_PROCESS is not None:
+            return RENDERER_PROCESS
 
-    environment = RendererEnvironmentDetector().detect()
-    if not environment.ready:
-        raise RuntimeError("; ".join(environment.problems))
-    RENDERER_PROCESS = _create_renderer(environment)
-    return RENDERER_PROCESS
+        environment = RendererEnvironmentDetector().detect()
+        if not environment.ready:
+            raise RuntimeError("; ".join(environment.problems))
+        RENDERER_PROCESS = _create_renderer(environment)
+        return RENDERER_PROCESS
 
 
 def _mermaid_render_options(source_view):
@@ -132,6 +137,7 @@ MERMAID_CONTROLLER = MermaidController(
     schedule_main=sublime.set_timeout,
     region_factory=sublime.Region,
     options_provider=_mermaid_render_options,
+    cache=RENDER_CACHE,
 )
 MATHJAX_CONTROLLER = MathJaxController(
     preview_manager=PREVIEW_MANAGER,
@@ -140,6 +146,7 @@ MATHJAX_CONTROLLER = MathJaxController(
     schedule_main=sublime.set_timeout,
     region_factory=sublime.Region,
     options_provider=_mathjax_render_options,
+    cache=RENDER_CACHE,
 )
 
 
@@ -158,9 +165,11 @@ PREVIEW_MANAGER.set_after_render(_render_special_blocks)
 
 def plugin_unloaded():
     global RENDERER_PROCESS
-    if RENDERER_PROCESS is not None:
-        RENDERER_PROCESS.close()
-        RENDERER_PROCESS = None
+    RENDER_CACHE.clear()
+    with RENDERER_PROCESS_LOCK:
+        if RENDERER_PROCESS is not None:
+            RENDERER_PROCESS.close()
+            RENDERER_PROCESS = None
 
 
 def _open_preview(window, side_by_side):

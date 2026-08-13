@@ -5,6 +5,8 @@ import hashlib
 import re
 from dataclasses import dataclass
 
+from .render_cache import BoundedMemoryCache, RenderCacheKey
+from .renderer_process import RendererProtocolError
 from .vendor.mistune import create_markdown
 
 MAX_DOCUMENT_BYTES = 2 * 1024 * 1024
@@ -12,6 +14,7 @@ MAX_MERMAID_SOURCE_BYTES = 128 * 1024
 MAX_RENDERED_IMAGE_BYTES = 5 * 1024 * 1024
 MAX_RENDERED_DIMENSION = 4096
 _PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+MERMAID_RENDERER_VERSION = "11.16.1"
 
 
 @dataclass(frozen=True)
@@ -30,14 +33,15 @@ class MermaidRenderResult:
     error: str = ""
     width: int = 0
     height: int = 0
+    cacheable: bool = True
 
     @classmethod
     def success(cls, data, width=0, height=0):
         return cls(data=data, width=width, height=height)
 
     @classmethod
-    def failure(cls, error):
-        return cls(error=error)
+    def failure(cls, error, cacheable=True):
+        return cls(error=error, cacheable=cacheable)
 
 
 @dataclass(frozen=True)
@@ -51,7 +55,20 @@ class MermaidRenderOptions:
 
 def mermaid_block_key(source):
     """Return the deterministic identity used to join parser and renderer output."""
-    return hashlib.sha256(source.encode("utf-8")).hexdigest()
+    digest = hashlib.sha256(source.encode("utf-8")).hexdigest()
+    return "mermaid:{}".format(digest)
+
+
+def mermaid_render_cache_key(block, options):
+    """Return the full identity of one rendered Mermaid image."""
+    return RenderCacheKey(
+        renderer="mermaid",
+        version=MERMAID_RENDERER_VERSION,
+        source=block.source,
+        theme=options.theme,
+        width=options.width,
+        scale=options.scale,
+    )
 
 
 def extract_mermaid_blocks(source):
@@ -107,6 +124,7 @@ class MermaidController:
         schedule_main,
         region_factory,
         options_provider,
+        cache=None,
     ):
         self._preview_manager = preview_manager
         self._renderer_provider = renderer_provider
@@ -114,10 +132,17 @@ class MermaidController:
         self._schedule_main = schedule_main
         self._region_factory = region_factory
         self._options_provider = options_provider
+        self._cache = cache if cache is not None else BoundedMemoryCache()
 
     def preview_updated(self, window, source_view, source):
         """Schedule all Mermaid blocks found in one rendered source revision."""
         blocks = extract_mermaid_blocks(source)
+        self._preview_manager.retain_special_results(
+            window,
+            source_view,
+            "mermaid",
+            {block.key for block in blocks},
+        )
         if not blocks:
             return
         options = self._options_provider(source_view)
@@ -128,16 +153,38 @@ class MermaidController:
     def _render_revision(self, window, source_view, source, blocks, options):
         results = {}
         unique_blocks = {block.key: block for block in blocks}
-        try:
-            renderer = self._renderer_provider()
-        except Exception as error:  # environment failures apply to every block
-            message = _concise_error(error)
-            results = {
-                key: MermaidRenderResult.failure(message) for key in unique_blocks
-            }
-        else:
-            for key, block in unique_blocks.items():
-                results[key] = self._render_block(renderer, block, options)
+        missing = {}
+        for key, block in unique_blocks.items():
+            cache_key = mermaid_render_cache_key(block, options)
+            cached = self._cache.get(cache_key)
+            if cached is None:
+                missing[key] = (block, cache_key)
+            else:
+                results[key] = cached
+
+        if missing:
+            try:
+                renderer = self._renderer_provider()
+            except Exception as error:  # environment failures apply to every miss
+                message = _concise_error(error)
+                results.update(
+                    {
+                        key: MermaidRenderResult.failure(message)
+                        for key in missing
+                    }
+                )
+            else:
+                for key, (block, cache_key) in missing.items():
+                    result, _reused = self._cache.get_or_compute(
+                        cache_key,
+                        lambda block=block: self._render_block(
+                            renderer,
+                            block,
+                            options,
+                        ),
+                        should_store=lambda candidate: candidate.cacheable,
+                    )
+                    results[key] = result
 
         self._schedule_main(
             lambda: self._apply_if_current(window, source_view, source, results)
@@ -160,6 +207,11 @@ class MermaidController:
                 },
             )
             return self._validated_result(response, options.scale)
+        except (TimeoutError, RendererProtocolError) as error:
+            return MermaidRenderResult.failure(
+                _concise_error(error),
+                cacheable=False,
+            )
         except Exception as error:  # a malformed block must not affect its siblings
             return MermaidRenderResult.failure(_concise_error(error))
 

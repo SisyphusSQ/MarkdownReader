@@ -249,6 +249,30 @@ class PreviewManagerTests(unittest.TestCase):
         )
         self.assertEqual(2, len(sheet.content_updates))
 
+    def test_prunes_historical_results_for_only_the_requested_renderer(self):
+        self.manager.open_preview(self.window, self.view, make_region)
+        key = (self.window.id(), self.view.id())
+        self.manager._special_results[key] = {
+            "mermaid:old": "old diagram",
+            "mermaid:current": "current diagram",
+            "mathjax:current": "current formula",
+        }
+
+        self.manager.retain_special_results(
+            self.window,
+            self.view,
+            renderer="mermaid",
+            active_keys={"mermaid:current"},
+        )
+
+        self.assertEqual(
+            {
+                "mermaid:current": "current diagram",
+                "mathjax:current": "current formula",
+            },
+            self.manager._special_results[key],
+        )
+
 
 class SideBySideGroupTests(unittest.TestCase):
     def test_single_group_becomes_two_equal_columns(self):

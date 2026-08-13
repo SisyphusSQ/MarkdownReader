@@ -7,6 +7,7 @@ from markdown_reader.mermaid import (
     mermaid_block_key,
     mermaid_theme_for_background,
 )
+from markdown_reader.renderer_process import RendererProtocolError
 
 
 def make_region(start, end):
@@ -36,12 +37,16 @@ class FakePreviewManager:
     def __init__(self):
         self.preview_open = True
         self.applied = []
+        self.retained = []
 
     def has_preview(self, window, view):
         return self.preview_open
 
     def apply_special_results(self, window, view, region_factory, results):
         self.applied.append((window, view, region_factory, results))
+
+    def retain_special_results(self, window, view, renderer, active_keys):
+        self.retained.append((window, view, renderer, active_keys))
 
 
 class FakeRenderer:
@@ -220,6 +225,52 @@ class MermaidControllerTests(unittest.TestCase):
 
         self.assertEqual([], self.async_calls)
         self.assertEqual([], renderer_requests)
+        self.assertEqual(
+            [(self.window, self.view, "mermaid", set())],
+            self.manager.retained,
+        )
+
+    def test_reuses_cached_blocks_and_renders_only_changed_source(self):
+        success = {
+            "mimeType": "image/png",
+            "data": "iVBORw0KGgoAAAANSUhEUg==",
+            "width": 320,
+            "height": 120,
+        }
+        renderer = FakeRenderer([success, success, success])
+        controller = self.make_controller(renderer)
+
+        controller.preview_updated(self.window, self.view, self.source)
+        self.run_scheduled()
+        controller.preview_updated(self.window, self.view, self.source)
+        self.run_scheduled()
+
+        changed_source = self.source.replace("broken", "changed")
+        self.view.text = changed_source
+        controller.preview_updated(self.window, self.view, changed_source)
+        self.run_scheduled()
+
+        self.assertEqual(3, len(renderer.requests))
+        self.assertEqual("changed\n", renderer.requests[-1][1]["source"])
+
+    def test_retries_a_transient_protocol_failure(self):
+        success = {
+            "mimeType": "image/png",
+            "data": "iVBORw0KGgoAAAANSUhEUg==",
+            "width": 320,
+            "height": 120,
+        }
+        self.source = "```mermaid\ngraph LR\n```\n"
+        self.view.text = self.source
+        renderer = FakeRenderer([RendererProtocolError("broken pipe"), success])
+        controller = self.make_controller(renderer)
+
+        controller.preview_updated(self.window, self.view, self.source)
+        self.run_scheduled()
+        controller.preview_updated(self.window, self.view, self.source)
+        self.run_scheduled()
+
+        self.assertEqual(2, len(renderer.requests))
 
 
 if __name__ == "__main__":

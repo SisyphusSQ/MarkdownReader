@@ -2,9 +2,11 @@
 
 All notable changes to MarkdownReader will be documented in this file.
 
-The project intends to use semantic versioning once it has an installable release.
+The project uses semantic versioning for installable releases.
 
 ## Unreleased
+
+## 0.1.0 - 2026-08-13
 
 ### Added
 
@@ -34,5 +36,12 @@ The project intends to use semantic versioning once it has an installable releas
   refresh of open previews after settings or theme changes.
 - A consolidated diagnostics command that reports effective settings, actionable
   environment problems, renderer readiness, and bundled component versions.
+- Deterministic runtime-only `.sublime-package` and `SHA256SUMS` generation,
+  including the Python 3.8 host selector required by installed packages.
 - Vendored Mistune 3.3.0 runtime subset with Python 3.8 compatibility adjustments.
 - Unit tests, a manual preview fixture, a project-local uv workflow, and CI checks.
+
+### Fixed
+
+- Resolve renderer theme from `View.style()` so Mermaid, MathJax, and the full
+  browser preview remain readable after switching between light and dark themes.

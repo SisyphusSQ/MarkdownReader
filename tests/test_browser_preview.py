@@ -165,6 +165,38 @@ class BrowserPreviewRenderingTests(unittest.TestCase):
 
 
 class BrowserPreviewFilesTests(unittest.TestCase):
+    def test_prunes_legacy_and_dead_process_directories_only(self):
+        try:
+            from markdown_reader.browser_preview import (
+                cleanup_stale_browser_preview_directories,
+            )
+        except ImportError as error:
+            self.fail("stale browser-preview cleanup is not implemented: {}".format(error))
+
+        with tempfile.TemporaryDirectory() as parent:
+            root = Path(parent)
+            legacy = root / "markdown-reader-browser-legacy"
+            dead = root / "markdown-reader-browser-424242-dead"
+            live = root / "markdown-reader-browser-123-live"
+            current = root / "markdown-reader-browser-999-current"
+            unrelated = root / "another-application"
+            for directory in (legacy, dead, live, current, unrelated):
+                directory.mkdir()
+                (directory / "preview.html").write_text("private", encoding="utf-8")
+
+            removed = cleanup_stale_browser_preview_directories(
+                directory=root,
+                current_process_id=999,
+                is_process_alive=lambda process_id: process_id == 123,
+            )
+
+            self.assertEqual(2, removed)
+            self.assertFalse(legacy.exists())
+            self.assertFalse(dead.exists())
+            self.assertTrue(live.exists())
+            self.assertTrue(current.exists())
+            self.assertTrue(unrelated.exists())
+
     def test_reuses_one_private_artifact_per_view_and_cleans_the_session(self):
         try:
             from markdown_reader.browser_preview import BrowserPreviewFiles
@@ -183,6 +215,28 @@ class BrowserPreviewFilesTests(unittest.TestCase):
             self.assertEqual([second], list(session_directory.iterdir()))
             files.cleanup()
             self.assertFalse(session_directory.exists())
+
+    def test_old_expiry_cannot_remove_a_newer_snapshot_for_the_same_view(self):
+        from markdown_reader.browser_preview import BrowserPreviewFiles
+
+        scheduled = []
+        with tempfile.TemporaryDirectory() as parent:
+            session_directory = Path(parent) / "browser-session"
+            files = BrowserPreviewFiles(directory=session_directory)
+            first = files.write(window_id=7, view_id=11, html="first")
+            files.schedule_cleanup(
+                first,
+                lambda callback, _delay_ms: scheduled.append(callback),
+                10_000,
+            )
+            second = files.write(window_id=7, view_id=11, html="second")
+
+            scheduled[0]()
+
+            self.assertEqual(first, second)
+            self.assertTrue(second.is_file())
+            self.assertEqual("second", second.read_text(encoding="utf-8"))
+            files.cleanup()
 
 
 class BrowserPreviewServiceTests(unittest.TestCase):
@@ -245,7 +299,43 @@ class BrowserPreviewServiceTests(unittest.TestCase):
                     theme="light",
                     allow_single_dollar_math=False,
                 )
-            files.cleanup()
+            self.assertFalse((Path(parent) / "session").exists())
+
+    def test_open_schedules_ephemeral_artifact_removal(self):
+        from markdown_reader.browser_preview import (
+            BrowserPreviewFiles,
+            BrowserPreviewService,
+        )
+
+        scheduled = []
+        with tempfile.TemporaryDirectory() as parent:
+            session_directory = Path(parent) / "session"
+            service = BrowserPreviewService(
+                runtime_loader=lambda: "runtime",
+                files=BrowserPreviewFiles(directory=session_directory),
+                opener=lambda _uri: True,
+                schedule_cleanup=lambda callback, delay_ms: scheduled.append(
+                    (callback, delay_ms)
+                ),
+                cleanup_delay_ms=10_000,
+            )
+
+            artifact = service.open(
+                window_id=3,
+                view_id=5,
+                source="Browser",
+                source_path=None,
+                title="Browser notes",
+                theme="light",
+                allow_single_dollar_math=False,
+            )
+
+            self.assertTrue(artifact.is_file())
+            self.assertEqual(1, len(scheduled))
+            self.assertEqual(10_000, scheduled[0][1])
+            scheduled[0][0]()
+            self.assertFalse(artifact.exists())
+            self.assertFalse(session_directory.exists())
 
     def test_close_cleans_artifacts_and_prevents_post_unload_recreation(self):
         from markdown_reader.browser_preview import (

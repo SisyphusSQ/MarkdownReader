@@ -6,6 +6,7 @@ from markdown_reader.mermaid import (
     extract_mermaid_blocks,
     mermaid_block_key,
     mermaid_theme_for_background,
+    mermaid_theme_for_styles,
 )
 from markdown_reader.renderer_process import RendererProtocolError
 
@@ -80,6 +81,19 @@ class MermaidExtractionTests(unittest.TestCase):
         self.assertEqual("default", mermaid_theme_for_background("#FAFAFA"))
         self.assertEqual("dark", mermaid_theme_for_background("#123"))
         self.assertEqual("default", mermaid_theme_for_background("not-a-color"))
+
+    def test_uses_view_background_when_scope_style_omits_it(self):
+        self.assertEqual(
+            "dark",
+            mermaid_theme_for_styles(
+                {"background": "#343d46", "foreground": "#d8dee9"},
+                {"foreground": "#d8dee9"},
+            ),
+        )
+        self.assertEqual(
+            "default",
+            mermaid_theme_for_styles({}, {"background": "#ffffff"}),
+        )
 
 
 class MermaidControllerTests(unittest.TestCase):
